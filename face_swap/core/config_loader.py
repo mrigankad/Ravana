@@ -6,11 +6,14 @@ As per PRD Section 9.2, this loads pipeline configuration from YAML files
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 import yaml
 
 from ..pipeline import PipelineConfig
+
+if TYPE_CHECKING:
+    from ..api import FaceSwapConfig
 
 _DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent.parent / "configs" / "default.yaml"
