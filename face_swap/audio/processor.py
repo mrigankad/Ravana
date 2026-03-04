@@ -215,12 +215,12 @@ class AudioProcessor:
             video_path,
         ]
 
+        import json
+
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 return {}
-
-            import json
 
             data = json.loads(result.stdout)
 
@@ -247,7 +247,7 @@ class AudioProcessor:
 
             return info
 
-        except (subprocess.TimeoutExpired, json.JSONDecodeError):
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
             return {}
 
     # ------------------------------------------------------------------

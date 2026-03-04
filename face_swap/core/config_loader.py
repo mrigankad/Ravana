@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional, Union
 
 import yaml
 
-from ..api import FaceSwapConfig
 from ..pipeline import PipelineConfig
 
 _DEFAULT_CONFIG_PATH = (
@@ -65,7 +64,7 @@ def load_face_swap_config(
     path: Optional[Union[str, Path]] = None,
     quality: Optional[str] = None,
     overrides: Optional[Dict[str, Any]] = None,
-) -> FaceSwapConfig:
+) -> "FaceSwapConfig":
     """
     Build a user-friendly ``FaceSwapConfig`` from a YAML file.
 
@@ -91,6 +90,8 @@ def load_face_swap_config(
     blending = data.get("blending", {})
     temporal = data.get("temporal", {})
     swap = data.get("swap", {})
+
+    from ..api import FaceSwapConfig
 
     return FaceSwapConfig(
         quality=quality or "high",

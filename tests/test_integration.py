@@ -110,16 +110,23 @@ class TestCoreTypes:
         from face_swap.core.types import PipelineResult
 
         img = np.zeros((256, 256, 3), dtype=np.uint8)
-        result = PipelineResult(output_frame=img, faces_detected=1)
+        result = PipelineResult(
+            output_frame=img, swap_results=[], processing_time_ms=10.0
+        )
         assert result.output_frame is not None
-        assert result.faces_detected == 1
+        assert len(result.swap_results) == 0
 
     def test_swap_result(self):
         from face_swap.core.types import SwapResult
 
         face = np.zeros((128, 128, 3), dtype=np.uint8)
         mask = np.ones((128, 128), dtype=np.float32)
-        result = SwapResult(swapped_face=face, mask=mask)
+        result = SwapResult(
+            swapped_face=face,
+            mask=mask,
+            source_embedding=None,
+            target_aligned=None,
+        )
         assert result.swapped_face.shape == (128, 128, 3)
 
 
@@ -136,10 +143,10 @@ class TestQualityIntegration:
         from face_swap.core.quality import QualityCode, QualityReport
 
         report = QualityReport(
-            passed=True,
             code=QualityCode.OK,
             message="All checks passed",
-            scores={"confidence": 0.95, "blur": 200.0},
+            score=0.95,
+            sharpness=200.0,
         )
         assert report.passed is True
         assert report.code == QualityCode.OK
@@ -153,8 +160,9 @@ class TestProfilerIntegration:
 
         from face_swap.core.profiler import PipelineProfiler
 
-        profiler = PipelineProfiler(enabled=True)
-        profiler.start_frame()
+        profiler = PipelineProfiler()
+        profiler.enabled = True
+        profiler.begin_frame()
 
         with profiler.stage("detection"):
             time.sleep(0.005)
@@ -172,8 +180,9 @@ class TestProfilerIntegration:
     def test_profiler_disabled(self):
         from face_swap.core.profiler import PipelineProfiler
 
-        profiler = PipelineProfiler(enabled=False)
-        profiler.start_frame()
+        profiler = PipelineProfiler()
+        profiler.enabled = False
+        profiler.begin_frame()
         with profiler.stage("test"):
             pass
         profiler.end_frame()
@@ -208,26 +217,27 @@ class TestModelManager:
         info = ModelInfo(
             name="test_model",
             version="1.0.0",
-            filename="test_model.onnx",
+            path="test_model.onnx",
+            format="onnx",
         )
-        mgr.register(info)
-        assert mgr.get("test_model") is not None
+        mgr.register_model(info)
+        assert mgr.get_model("test_model") is not None
 
     def test_model_rollback(self, temp_dir):
         from face_swap.core.model_manager import ModelInfo, ModelManager
 
         mgr = ModelManager(models_dir=temp_dir)
 
-        v1 = ModelInfo(name="swap", version="1.0", filename="swap_v1.onnx")
-        v2 = ModelInfo(name="swap", version="2.0", filename="swap_v2.onnx")
-        mgr.register(v1)
-        mgr.register(v2)
+        v1 = ModelInfo(name="swap", version="1.0", path="swap_v1.onnx", format="onnx")
+        v2 = ModelInfo(name="swap", version="2.0", path="swap_v2.onnx", format="onnx")
+        mgr.register_model(v1)
+        mgr.register_model(v2)
 
-        current = mgr.get("swap")
+        current = mgr.get_model("swap")
         assert current.version == "2.0"
 
         mgr.rollback("swap")
-        rolled = mgr.get("swap")
+        rolled = mgr.get_model("swap")
         assert rolled.version == "1.0"
 
 
