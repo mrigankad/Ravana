@@ -2,12 +2,12 @@
 Tests for the quality validator module.
 """
 
-import numpy as np
 import cv2
+import numpy as np
 import pytest
 
-from face_swap.core.types import FaceBBox, AlignedFace, Embedding, SwapResult
-from face_swap.core.quality import QualityValidator, QualityCode
+from face_swap.core.quality import QualityCode, QualityValidator
+from face_swap.core.types import AlignedFace, Embedding, FaceBBox, SwapResult
 
 
 @pytest.fixture
@@ -34,6 +34,7 @@ def low_confidence_bbox():
 # Detection validation
 # ------------------------------------------------------------------
 
+
 class TestDetectionValidation:
     def test_valid_detection(self, validator, good_bbox):
         report = validator.validate_detection(good_bbox, (720, 1280))
@@ -56,6 +57,7 @@ class TestDetectionValidation:
 # ------------------------------------------------------------------
 # Swap validation
 # ------------------------------------------------------------------
+
 
 class TestSwapValidation:
     def _make_swap_result(self, face_img=None, quality_score=0.85):

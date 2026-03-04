@@ -12,12 +12,13 @@ This module provides:
   - CodeFormer restoration for maximum quality.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import logging
-import numpy as np
+
 import cv2
+import numpy as np
 
 logger = logging.getLogger("face_swap.enhancement")
 
@@ -86,9 +87,7 @@ class GFPGANEnhancer(FaceEnhancer):
         try:
             from gfpgan import GFPGANer
         except ImportError:
-            raise ImportError(
-                "GFPGAN is required. Install with: pip install gfpgan"
-            )
+            raise ImportError("GFPGAN is required. Install with: pip install gfpgan")
 
         self._restorer = GFPGANer(
             model_path="GFPGANv1.4.pth",
@@ -118,8 +117,12 @@ class GFPGANEnhancer(FaceEnhancer):
             from realesrgan import RealESRGANer
 
             model = RRDBNet(
-                num_in_ch=3, num_out_ch=3, num_feat=64,
-                num_block=23, num_grow_ch=32, scale=2,
+                num_in_ch=3,
+                num_out_ch=3,
+                num_feat=64,
+                num_block=23,
+                num_grow_ch=32,
+                scale=2,
             )
             return RealESRGANer(
                 scale=2,
@@ -159,8 +162,12 @@ class RealESRGANEnhancer(FaceEnhancer):
 
         scale = max(self.config.upscale, 2)
         model = RRDBNet(
-            num_in_ch=3, num_out_ch=3, num_feat=64,
-            num_block=23, num_grow_ch=32, scale=scale,
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_block=23,
+            num_grow_ch=32,
+            scale=scale,
         )
         model_name = f"RealESRGAN_x{scale}plus.pth"
         half = self.config.device == "cuda"
@@ -203,15 +210,15 @@ class CodeFormerEnhancer(FaceEnhancer):
             raise ImportError("PyTorch is required for CodeFormer.")
 
         import torch
+
         self._device = torch.device(self.config.device)
 
         # CodeFormer is typically loaded via its own inference utility;
         # here we provide the integration hook.
         try:
             from codeformer.basicsr.utils import img2tensor, tensor2img
-            from codeformer.facelib.utils.face_restoration_helper import (
-                FaceRestoreHelper,
-            )
+            from codeformer.facelib.utils.face_restoration_helper import \
+                FaceRestoreHelper
             from codeformer.inference_codeformer import set_realesrgan
 
             self._available = True
@@ -238,6 +245,7 @@ class CodeFormerEnhancer(FaceEnhancer):
 
 
 # ── Factory function ────────────────────────────────────────────────────
+
 
 def create_enhancer(config: EnhancementConfig) -> FaceEnhancer:
     """

@@ -3,9 +3,11 @@ Tests for the profiler module.
 """
 
 import time
+
 import pytest
 
-from face_swap.core.profiler import PipelineProfiler, StageTimings, BenchmarkReport
+from face_swap.core.profiler import (BenchmarkReport, PipelineProfiler,
+                                     StageTimings)
 
 
 @pytest.fixture

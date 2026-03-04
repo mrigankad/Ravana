@@ -29,7 +29,9 @@ def main():
     )
 
     parser.add_argument("--dataset", required=True, help="Training images directory")
-    parser.add_argument("--output", default="./training_output", help="Output directory")
+    parser.add_argument(
+        "--output", default="./training_output", help="Output directory"
+    )
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size")
     parser.add_argument("--resolution", type=int, default=256, choices=[256, 512])

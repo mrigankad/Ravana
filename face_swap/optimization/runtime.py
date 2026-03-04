@@ -17,10 +17,10 @@ Usage:
     >>> output = rt.infer(target_tensor, embedding_tensor)
 """
 
-from typing import Dict, List, Optional, Tuple
-import os
 import logging
+import os
 import time
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -79,9 +79,9 @@ class TensorRTRuntime:
             return
 
         try:
-            import tensorrt as trt
-            import pycuda.driver as cuda
             import pycuda.autoinit  # noqa: F401 — initialises CUDA context
+            import pycuda.driver as cuda
+            import tensorrt as trt
         except ImportError as e:
             raise ImportError(
                 "TensorRT and pycuda are required. "
@@ -218,24 +218,22 @@ class TensorRTRuntime:
 
         # Map args to input binding names (in order)
         input_names = [
-            name for name, buf in sorted(
-                self._buffers.items(), key=lambda x: x[1]["index"]
-            ) if buf["is_input"]
+            name
+            for name, buf in sorted(self._buffers.items(), key=lambda x: x[1]["index"])
+            if buf["is_input"]
         ]
 
         if len(args) != len(input_names):
-            raise ValueError(
-                f"Expected {len(input_names)} inputs, got {len(args)}"
-            )
+            raise ValueError(f"Expected {len(input_names)} inputs, got {len(args)}")
 
         kw = dict(zip(input_names, args))
         result = self.infer(**kw)
 
         # Return outputs in binding order
         output_names = [
-            name for name, buf in sorted(
-                self._buffers.items(), key=lambda x: x[1]["index"]
-            ) if not buf["is_input"]
+            name
+            for name, buf in sorted(self._buffers.items(), key=lambda x: x[1]["index"])
+            if not buf["is_input"]
         ]
         return [result[n] for n in output_names]
 
@@ -274,9 +272,7 @@ class TensorRTRuntime:
         dummy_inputs = {}
         for name, buf in self._buffers.items():
             if buf["is_input"]:
-                dummy_inputs[name] = np.random.randn(
-                    *buf["shape"]
-                ).astype(buf["dtype"])
+                dummy_inputs[name] = np.random.randn(*buf["shape"]).astype(buf["dtype"])
 
         # Warm up
         for _ in range(warmup):
@@ -330,7 +326,8 @@ class OnnxFallbackRuntime:
         import onnxruntime as ort
 
         providers = (
-            ["CUDAExecutionProvider"] if self._device == "cuda"
+            ["CUDAExecutionProvider"]
+            if self._device == "cuda"
             else ["CPUExecutionProvider"]
         )
         self._session = ort.InferenceSession(self._model_path, providers=providers)

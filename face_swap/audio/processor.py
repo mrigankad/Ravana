@@ -11,13 +11,13 @@ This module provides:
   - Subtitle / metadata track passthrough.
 """
 
-from pathlib import Path
-from typing import Optional, Tuple, List
-import subprocess
-import shutil
-import tempfile
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger("face_swap.audio")
 
@@ -68,17 +68,18 @@ class AudioProcessor:
             output_path = tempfile.mktemp(suffix=ext)
 
         cmd = [
-            self._ffmpeg, "-i", video_path,
+            self._ffmpeg,
+            "-i",
+            video_path,
             "-vn",  # no video
-            "-acodec", "copy" if codec == "aac" else codec,
+            "-acodec",
+            "copy" if codec == "aac" else codec,
             "-y",  # overwrite
             output_path,
         ]
 
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             if result.returncode != 0:
                 logger.warning("Audio extraction failed: %s", result.stderr[:500])
                 return None
@@ -128,12 +129,18 @@ class AudioProcessor:
 
         cmd = [
             self._ffmpeg,
-            "-i", video_path,
-            "-i", audio_path,
-            "-c:v", "copy" if copy_video else "libx264",
-            "-c:a", "aac",
-            "-map", "0:v:0",
-            "-map", "1:a:0",
+            "-i",
+            video_path,
+            "-i",
+            audio_path,
+            "-c:v",
+            "copy" if copy_video else "libx264",
+            "-c:a",
+            "aac",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
             "-shortest",
             "-y",
             output_path,
@@ -199,9 +206,13 @@ class AudioProcessor:
 
         ffprobe = self._ffmpeg.replace("ffmpeg", "ffprobe")
         cmd = [
-            ffprobe, "-v", "quiet",
-            "-print_format", "json",
-            "-show_format", "-show_streams",
+            ffprobe,
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
             video_path,
         ]
 
@@ -211,6 +222,7 @@ class AudioProcessor:
                 return {}
 
             import json
+
             data = json.loads(result.stdout)
 
             info = {

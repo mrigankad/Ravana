@@ -5,12 +5,8 @@ As per PRD Section 3.2 Use Case 4:
   - Integration with camera apps to provide fun filters in real time.
 """
 
-from .ar_filters import (
-    ARFilterEngine,
-    FilterPreset,
-    FilterGallery,
-    OverlayMode,
-)
+from .ar_filters import (ARFilterEngine, FilterGallery, FilterPreset,
+                         OverlayMode)
 
 __all__ = [
     "ARFilterEngine",

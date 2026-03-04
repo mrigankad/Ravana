@@ -7,20 +7,13 @@ Validates the typed data structures defined in PRD Section 7.1.
 import numpy as np
 import pytest
 
-from face_swap.core.types import (
-    Point,
-    FaceBBox,
-    Landmarks,
-    AlignedFace,
-    Embedding,
-    SwapResult,
-    PipelineResult,
-)
-
+from face_swap.core.types import (AlignedFace, Embedding, FaceBBox, Landmarks,
+                                  PipelineResult, Point, SwapResult)
 
 # ------------------------------------------------------------------
 # FaceBBox
 # ------------------------------------------------------------------
+
 
 class TestFaceBBox:
     def test_width_height(self):
@@ -51,6 +44,7 @@ class TestFaceBBox:
 # Landmarks
 # ------------------------------------------------------------------
 
+
 class TestLandmarks:
     def test_from_list(self):
         lm = Landmarks(points=[[1.0, 2.0], [3.0, 4.0]])
@@ -75,6 +69,7 @@ class TestLandmarks:
 # Embedding
 # ------------------------------------------------------------------
 
+
 class TestEmbedding:
     def test_normalize(self):
         vec = np.array([3.0, 4.0], dtype=np.float32)
@@ -90,12 +85,8 @@ class TestEmbedding:
         assert np.isclose(e1.cosine_similarity(e2), 1.0, atol=1e-5)
 
     def test_cosine_similarity_orthogonal(self):
-        e1 = Embedding(
-            vector=np.array([1, 0], dtype=np.float32), model_name="test"
-        )
-        e2 = Embedding(
-            vector=np.array([0, 1], dtype=np.float32), model_name="test"
-        )
+        e1 = Embedding(vector=np.array([1, 0], dtype=np.float32), model_name="test")
+        e2 = Embedding(vector=np.array([0, 1], dtype=np.float32), model_name="test")
         assert np.isclose(e1.cosine_similarity(e2), 0.0, atol=1e-5)
 
     def test_from_list(self):
@@ -107,6 +98,7 @@ class TestEmbedding:
 # ------------------------------------------------------------------
 # AlignedFace
 # ------------------------------------------------------------------
+
 
 class TestAlignedFace:
     def test_shape(self):
@@ -123,6 +115,7 @@ class TestAlignedFace:
 # ------------------------------------------------------------------
 # SwapResult / PipelineResult
 # ------------------------------------------------------------------
+
 
 class TestSwapResult:
     def test_shape(self):

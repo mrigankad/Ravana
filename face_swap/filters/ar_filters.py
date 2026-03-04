@@ -12,22 +12,24 @@ This module provides:
   - Shared filter gallery management.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Callable, Tuple
-from pathlib import Path
-from enum import Enum
 import logging
-import numpy as np
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
+
 import cv2
+import numpy as np
 
 logger = logging.getLogger("face_swap.filters")
 
 
 class OverlayMode(Enum):
     """Types of visual overlay that can be composited on top of a swap."""
+
     NONE = "none"
-    FRAME = "frame"           # Decorative frame around the output
-    STICKER = "sticker"       # 2D sticker overlay on the face
+    FRAME = "frame"  # Decorative frame around the output
+    STICKER = "sticker"  # 2D sticker overlay on the face
     BACKGROUND_BLUR = "bg_blur"
     BACKGROUND_REPLACE = "bg_replace"
     COLOR_GRADE = "color_grade"
@@ -93,7 +95,8 @@ class FilterGallery:
         """Search filters by name or tags."""
         query_lower = query.lower()
         return [
-            f for f in self._filters.values()
+            f
+            for f in self._filters.values()
             if query_lower in f.name.lower()
             or any(query_lower in t.lower() for t in f.tags)
         ]
@@ -185,12 +188,19 @@ class ARFilterEngine:
             raise ValueError(f"No valid source images for filter '{preset.name}'")
 
         if len(source_images) == 1:
-            self._source_embedding = self._pipeline.extract_source_embedding(source_images[0])
+            self._source_embedding = self._pipeline.extract_source_embedding(
+                source_images[0]
+            )
         else:
-            self._source_embedding = self._pipeline.extract_source_embedding_multi(source_images)
+            self._source_embedding = self._pipeline.extract_source_embedding_multi(
+                source_images
+            )
 
         # Load overlay assets
-        if preset.overlay_asset and preset.overlay_mode in (OverlayMode.FRAME, OverlayMode.STICKER):
+        if preset.overlay_asset and preset.overlay_mode in (
+            OverlayMode.FRAME,
+            OverlayMode.STICKER,
+        ):
             overlay = cv2.imread(preset.overlay_asset, cv2.IMREAD_UNCHANGED)
             if overlay is not None:
                 self._overlay_cache[preset.name] = overlay
@@ -253,6 +263,7 @@ class ARFilterEngine:
         cv2.namedWindow(window, cv2.WINDOW_NORMAL)
 
         import time
+
         frame_idx = 0
         fps_history: List[float] = []
 
@@ -273,12 +284,26 @@ class ARFilterEngine:
                     fps_history.pop(0)
                 avg_fps = sum(fps_history) / len(fps_history)
 
-                cv2.putText(output, f"FPS: {avg_fps:.0f}", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                cv2.putText(
+                    output,
+                    f"FPS: {avg_fps:.0f}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (0, 255, 0),
+                    2,
+                )
 
                 if self._current_filter:
-                    cv2.putText(output, self._current_filter.name, (10, 60),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.putText(
+                        output,
+                        self._current_filter.name,
+                        (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (255, 255, 255),
+                        2,
+                    )
 
                 cv2.imshow(window, output)
 
@@ -358,9 +383,9 @@ class ARFilterEngine:
 
         if sticker.shape[2] == 4:
             alpha = sticker[:, :, 3:4].astype(np.float32) / 255.0
-            roi = result[y: y + sh, x: x + sw]
+            roi = result[y : y + sh, x : x + sw]
             blended = (sticker[:, :, :3] * alpha + roi * (1 - alpha)).astype(np.uint8)
-            result[y: y + sh, x: x + sw] = blended
+            result[y : y + sh, x : x + sw] = blended
 
         return result
 

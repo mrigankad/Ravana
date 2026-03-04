@@ -8,14 +8,14 @@ As per PRD Section 8.3:
   if regressions are detected.
 """
 
+import hashlib
+import json
+import logging
+import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
-import json
-import os
-import hashlib
-import shutil
-import logging
 
 logger = logging.getLogger("face_swap.models")
 
@@ -130,10 +130,12 @@ class ModelManager:
 
         # Seed the registry with defaults
         for m in self._DEFAULT_MODELS:
-            full = ModelInfo(**{
-                **m.__dict__,
-                "path": str(self.models_dir / m.path),
-            })
+            full = ModelInfo(
+                **{
+                    **m.__dict__,
+                    "path": str(self.models_dir / m.path),
+                }
+            )
             self.registry.register(full)
 
         # Load persisted manifest on top (adds user-registered models)
@@ -179,7 +181,9 @@ class ModelManager:
         """
         versions = self.registry.list_versions(name)
         if len(versions) < 2:
-            logger.warning("Cannot rollback %s — only %d version(s).", name, len(versions))
+            logger.warning(
+                "Cannot rollback %s — only %d version(s).", name, len(versions)
+            )
             return None
 
         current = self._active_versions.get(name, versions[0])
@@ -191,9 +195,7 @@ class ModelManager:
         self.set_active_version(name, prev)
         return self.registry.get_version(name, prev)
 
-    def ensure_model(
-        self, name: str, version: Optional[str] = None
-    ) -> ModelInfo:
+    def ensure_model(self, name: str, version: Optional[str] = None) -> ModelInfo:
         """
         Make sure the model is downloaded and verified.
 
@@ -206,9 +208,7 @@ class ModelManager:
 
         if info.is_downloaded:
             if info.sha256 and not self._verify_sha256(info.path, info.sha256):
-                logger.warning(
-                    "SHA-256 mismatch for %s — re-downloading.", info.path
-                )
+                logger.warning("SHA-256 mismatch for %s — re-downloading.", info.path)
                 os.remove(info.path)
             else:
                 return info
@@ -250,11 +250,8 @@ class ModelManager:
                 for name in self.registry.models
                 for m in self.registry.models[name]
                 if m.name not in {d.name for d in self._DEFAULT_MODELS}
-                or m.version not in {
-                    d.version
-                    for d in self._DEFAULT_MODELS
-                    if d.name == m.name
-                }
+                or m.version
+                not in {d.version for d in self._DEFAULT_MODELS if d.name == m.name}
             ],
         }
         with open(self._manifest_path(), "w", encoding="utf-8") as fh:

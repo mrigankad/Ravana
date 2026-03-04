@@ -10,13 +10,14 @@ This implementation uses DCT-domain watermarking, which survives
 common image processing operations (resize, mild compression, small crops).
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Tuple
-from datetime import datetime, timezone
-import json
 import hashlib
-import numpy as np
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Optional, Tuple
+
 import cv2
+import numpy as np
 
 
 @dataclass
@@ -88,10 +89,22 @@ class InvisibleWatermarker:
 
     # DCT coefficient positions used for embedding (mid-frequency band)
     _COEFF_PAIRS: list = [
-        (3, 4), (4, 3), (2, 5), (5, 2),
-        (1, 6), (6, 1), (4, 4), (3, 5),
-        (5, 3), (2, 6), (6, 2), (1, 5),
-        (5, 1), (4, 2), (2, 4), (3, 3),
+        (3, 4),
+        (4, 3),
+        (2, 5),
+        (5, 2),
+        (1, 6),
+        (6, 1),
+        (4, 4),
+        (3, 5),
+        (5, 3),
+        (2, 6),
+        (6, 2),
+        (1, 5),
+        (5, 1),
+        (4, 2),
+        (2, 4),
+        (3, 3),
     ]
 
     def __init__(self, config: Optional[WatermarkConfig] = None):
@@ -144,7 +157,7 @@ class InvisibleWatermarker:
                 if bit_idx >= len(bits):
                     break
                 y0, x0 = by * 8, bx * 8
-                block = channel[y0: y0 + 8, x0: x0 + 8]
+                block = channel[y0 : y0 + 8, x0 : x0 + 8]
                 dct_block = cv2.dct(block)
 
                 for r, c in self._COEFF_PAIRS:
@@ -155,7 +168,7 @@ class InvisibleWatermarker:
                     dct_block[r, c] += delta
                     bit_idx += 1
 
-                channel[y0: y0 + 8, x0: x0 + 8] = cv2.idct(dct_block)
+                channel[y0 : y0 + 8, x0 : x0 + 8] = cv2.idct(dct_block)
 
         marked[:, :, 0] = np.clip(channel, 0, 255).astype(np.uint8)
         return marked
@@ -178,7 +191,7 @@ class InvisibleWatermarker:
         for by in range(block_h):
             for bx in range(block_w):
                 y0, x0 = by * 8, bx * 8
-                block = channel[y0: y0 + 8, x0: x0 + 8]
+                block = channel[y0 : y0 + 8, x0 : x0 + 8]
                 dct_block = cv2.dct(block)
 
                 for r, c in self._COEFF_PAIRS:
@@ -192,7 +205,7 @@ class InvisibleWatermarker:
         if idx is None:
             return None
 
-        payload_bits = raw_bits[idx + sig_len:]
+        payload_bits = raw_bits[idx + sig_len :]
         return self._bits_to_metadata(payload_bits)
 
     def create_provenance(
@@ -278,7 +291,7 @@ class InvisibleWatermarker:
         """Search for the signature prefix in a bit stream."""
         sig_len = len(self._SIGNATURE)
         for i in range(min(len(bits) - sig_len, 512)):
-            if np.array_equal(bits[i: i + sig_len], self._SIGNATURE):
+            if np.array_equal(bits[i : i + sig_len], self._SIGNATURE):
                 return i
         return None
 

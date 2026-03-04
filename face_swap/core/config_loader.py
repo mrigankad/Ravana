@@ -6,14 +6,16 @@ As per PRD Section 9.2, this loads pipeline configuration from YAML files
 """
 
 from pathlib import Path
-from typing import Optional, Union, Any, Dict
+from typing import Any, Dict, Optional, Union
+
 import yaml
 
-from ..pipeline import PipelineConfig
 from ..api import FaceSwapConfig
+from ..pipeline import PipelineConfig
 
-
-_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "configs" / "default.yaml"
+_DEFAULT_CONFIG_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "configs" / "default.yaml"
+)
 
 
 def load_config(path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
@@ -102,6 +104,7 @@ def load_face_swap_config(
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _dict_to_pipeline_config(data: Dict[str, Any]) -> PipelineConfig:
     """Map a flat / nested dict into a ``PipelineConfig`` dataclass."""

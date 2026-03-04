@@ -12,12 +12,13 @@ This module extends the base TemporalSmoother with:
   - Flow-guided blending for ghost-free transitions.
 """
 
-from typing import Optional, Dict, Tuple, List, Deque
+import logging
 from collections import deque
 from dataclasses import dataclass
-import logging
-import numpy as np
+from typing import Deque, Dict, List, Optional, Tuple
+
 import cv2
+import numpy as np
 
 logger = logging.getLogger("face_swap.temporal.advanced")
 
@@ -112,8 +113,10 @@ class OpticalFlowSmoother:
         # 5. Blend warped previous with current
         blend = self.config.warp_blend
         result = cv2.addWeighted(
-            warped.astype(np.float32), blend,
-            current_output.astype(np.float32), 1.0 - blend,
+            warped.astype(np.float32),
+            blend,
+            current_output.astype(np.float32),
+            1.0 - blend,
             0,
         )
         result = np.clip(result, 0, 255).astype(np.uint8)
@@ -163,14 +166,13 @@ class OpticalFlowSmoother:
 
     # ── Flow computation ─────────────────────────────────────────────────
 
-    def _compute_flow(
-        self, prev_gray: np.ndarray, curr_gray: np.ndarray
-    ) -> np.ndarray:
+    def _compute_flow(self, prev_gray: np.ndarray, curr_gray: np.ndarray) -> np.ndarray:
         """Compute dense optical flow between two grayscale frames."""
 
         if self.config.method == "farneback":
             flow = cv2.calcOpticalFlowFarneback(
-                prev_gray, curr_gray,
+                prev_gray,
+                curr_gray,
                 None,
                 pyr_scale=0.5,
                 levels=3,
@@ -198,7 +200,8 @@ class OpticalFlowSmoother:
         """
         try:
             import torch
-            from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
+            from torchvision.models.optical_flow import (Raft_Small_Weights,
+                                                         raft_small)
 
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -227,8 +230,16 @@ class OpticalFlowSmoother:
         except (ImportError, RuntimeError) as e:
             logger.warning("RAFT unavailable (%s); falling back to Farneback.", e)
             return cv2.calcOpticalFlowFarneback(
-                prev_gray, curr_gray, None,
-                0.5, 3, 15, 3, 5, 1.2, 0,
+                prev_gray,
+                curr_gray,
+                None,
+                0.5,
+                3,
+                15,
+                3,
+                5,
+                1.2,
+                0,
             )
 
     # ── Warping ──────────────────────────────────────────────────────────
@@ -252,7 +263,9 @@ class OpticalFlowSmoother:
         map_y += flow[:, :, 1]
 
         warped = cv2.remap(
-            frame, map_x, map_y,
+            frame,
+            map_x,
+            map_y,
             interpolation=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REPLICATE,
         )
@@ -317,8 +330,10 @@ class FlowGuidedBlender:
             alpha = 0.7  # Normally favor current
 
         result = cv2.addWeighted(
-            curr_output.astype(np.float32), alpha,
-            prev_output.astype(np.float32), 1.0 - alpha,
+            curr_output.astype(np.float32),
+            alpha,
+            prev_output.astype(np.float32),
+            1.0 - alpha,
             0,
         )
         return np.clip(result, 0, 255).astype(np.uint8)

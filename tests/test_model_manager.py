@@ -5,9 +5,10 @@ Tests for the model manager module.
 import json
 import tempfile
 from pathlib import Path
+
 import pytest
 
-from face_swap.core.model_manager import ModelManager, ModelInfo, ModelRegistry
+from face_swap.core.model_manager import ModelInfo, ModelManager, ModelRegistry
 
 
 @pytest.fixture
@@ -24,8 +25,7 @@ class TestModelRegistry:
     def test_register_and_get(self):
         reg = ModelRegistry()
         info = ModelInfo(
-            name="test_model", version="v1.0", path="/tmp/test.onnx",
-            format="onnx"
+            name="test_model", version="v1.0", path="/tmp/test.onnx", format="onnx"
         )
         reg.register(info)
         assert reg.get_latest("test_model") == info

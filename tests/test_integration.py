@@ -5,14 +5,15 @@ These tests validate the end-to-end flow from input to output,
 ensuring all pipeline stages work together correctly.
 """
 
-import pytest
-import numpy as np
 import os
-import tempfile
 import shutil
+import tempfile
 
+import numpy as np
+import pytest
 
 # ── Fixtures ────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def sample_image():
@@ -20,6 +21,7 @@ def sample_image():
     img = np.zeros((720, 1280, 3), dtype=np.uint8)
     # Skin-tone ellipse as face
     import cv2
+
     cv2.ellipse(img, (640, 360), (120, 160), 0, 0, 360, (180, 200, 220), -1)
     # Eyes
     cv2.circle(img, (600, 320), 15, (50, 50, 50), -1)
@@ -34,6 +36,7 @@ def sample_source_image():
     """Create a synthetic source identity image."""
     img = np.zeros((256, 256, 3), dtype=np.uint8)
     import cv2
+
     cv2.ellipse(img, (128, 128), (80, 100), 0, 0, 360, (200, 180, 160), -1)
     cv2.circle(img, (100, 110), 10, (40, 40, 40), -1)
     cv2.circle(img, (156, 110), 10, (40, 40, 40), -1)
@@ -52,6 +55,7 @@ def temp_dir():
 def sample_video(temp_dir):
     """Create a short synthetic test video (10 frames)."""
     import cv2
+
     path = os.path.join(temp_dir, "test_input.mp4")
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(path, fourcc, 30.0, (640, 480))
@@ -59,8 +63,9 @@ def sample_video(temp_dir):
     for i in range(10):
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         x_offset = i * 5
-        cv2.ellipse(frame, (320 + x_offset, 240), (80, 100), 0, 0, 360,
-                     (180, 200, 220), -1)
+        cv2.ellipse(
+            frame, (320 + x_offset, 240), (80, 100), 0, 0, 360, (180, 200, 220), -1
+        )
         writer.write(frame)
 
     writer.release()
@@ -69,20 +74,22 @@ def sample_video(temp_dir):
 
 # ── Pipeline integration tests ──────────────────────────────────────────
 
+
 class TestPipelineConfig:
     """Test PipelineConfig creation and validation."""
 
     def test_default_config(self):
         from face_swap.pipeline import PipelineConfig
+
         cfg = PipelineConfig()
         assert cfg.device in ("cpu", "cuda")
         assert cfg.crop_size in (128, 256, 512)
 
     def test_config_from_yaml(self):
         from face_swap.core.config_loader import load_pipeline_config
+
         config_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "configs", "default.yaml"
+            os.path.dirname(os.path.dirname(__file__)), "configs", "default.yaml"
         )
         if os.path.exists(config_path):
             cfg = load_pipeline_config(config_path)
@@ -94,12 +101,14 @@ class TestCoreTypes:
 
     def test_face_bbox_creation(self):
         from face_swap.core.types import FaceBBox
+
         bbox = FaceBBox(x1=10, y1=20, x2=110, y2=140, confidence=0.95)
         assert bbox.width == 100
         assert bbox.height == 120
 
     def test_pipeline_result(self):
         from face_swap.core.types import PipelineResult
+
         img = np.zeros((256, 256, 3), dtype=np.uint8)
         result = PipelineResult(output_frame=img, faces_detected=1)
         assert result.output_frame is not None
@@ -107,6 +116,7 @@ class TestCoreTypes:
 
     def test_swap_result(self):
         from face_swap.core.types import SwapResult
+
         face = np.zeros((128, 128, 3), dtype=np.uint8)
         mask = np.ones((128, 128), dtype=np.float32)
         result = SwapResult(swapped_face=face, mask=mask)
@@ -118,11 +128,13 @@ class TestQualityIntegration:
 
     def test_quality_validator_with_real_image(self, sample_image):
         from face_swap.core.quality import QualityValidator
+
         validator = QualityValidator()
         assert validator is not None
 
     def test_quality_report_structure(self):
-        from face_swap.core.quality import QualityReport, QualityCode
+        from face_swap.core.quality import QualityCode, QualityReport
+
         report = QualityReport(
             passed=True,
             code=QualityCode.OK,
@@ -137,8 +149,9 @@ class TestProfilerIntegration:
     """Test profiler in realistic usage patterns."""
 
     def test_profiler_multistage(self):
-        from face_swap.core.profiler import PipelineProfiler
         import time
+
+        from face_swap.core.profiler import PipelineProfiler
 
         profiler = PipelineProfiler(enabled=True)
         profiler.start_frame()
@@ -158,6 +171,7 @@ class TestProfilerIntegration:
 
     def test_profiler_disabled(self):
         from face_swap.core.profiler import PipelineProfiler
+
         profiler = PipelineProfiler(enabled=False)
         profiler.start_frame()
         with profiler.stage("test"):
@@ -170,6 +184,7 @@ class TestWatermarkIntegration:
 
     def test_watermark_roundtrip(self, sample_image):
         from face_swap.watermark import InvisibleWatermarker, WatermarkConfig
+
         config = WatermarkConfig(enabled=True, message="test_integration")
         wm = InvisibleWatermarker(config)
 
@@ -186,7 +201,8 @@ class TestModelManager:
     """Test model management in an integrated context."""
 
     def test_model_registration(self, temp_dir):
-        from face_swap.core.model_manager import ModelManager, ModelInfo
+        from face_swap.core.model_manager import ModelInfo, ModelManager
+
         mgr = ModelManager(models_dir=temp_dir)
 
         info = ModelInfo(
@@ -198,7 +214,8 @@ class TestModelManager:
         assert mgr.get("test_model") is not None
 
     def test_model_rollback(self, temp_dir):
-        from face_swap.core.model_manager import ModelManager, ModelInfo
+        from face_swap.core.model_manager import ModelInfo, ModelManager
+
         mgr = ModelManager(models_dir=temp_dir)
 
         v1 = ModelInfo(name="swap", version="1.0", filename="swap_v1.onnx")
@@ -230,6 +247,7 @@ class TestConfigLoader:
             yaml.dump(config_data, f)
 
         from face_swap.core.config_loader import load_config
+
         loaded = load_config(config_path)
         assert loaded["device"] == "cpu"
 
@@ -238,7 +256,8 @@ class TestPluginSystem:
     """Test the plugin registry."""
 
     def test_registry_creation(self):
-        from face_swap.plugins import PluginRegistry, PluginInfo
+        from face_swap.plugins import PluginInfo, PluginRegistry
+
         registry = PluginRegistry()
 
         class DummyDetector:
@@ -254,7 +273,8 @@ class TestPluginSystem:
         assert registry.get("detector", "dummy") == DummyDetector
 
     def test_list_plugins(self):
-        from face_swap.plugins import PluginRegistry, PluginInfo
+        from face_swap.plugins import PluginInfo, PluginRegistry
+
         registry = PluginRegistry()
 
         class A:
@@ -278,12 +298,14 @@ class TestAudioProcessor:
 
     def test_processor_creation(self):
         from face_swap.audio import AudioProcessor
+
         proc = AudioProcessor()
         # May or may not have FFmpeg
         assert isinstance(proc.available, bool)
 
     def test_video_info(self, sample_video):
         from face_swap.audio import AudioProcessor
+
         proc = AudioProcessor()
         if proc.available:
             info = proc.get_video_info(sample_video)
@@ -295,13 +317,15 @@ class TestEnhancement:
 
     def test_config_defaults(self):
         from face_swap.enhancement import EnhancementConfig
+
         cfg = EnhancementConfig()
         assert cfg.enabled is False
         assert cfg.method == "gfpgan"
         assert cfg.upscale == 1
 
     def test_create_enhancer_factory(self):
-        from face_swap.enhancement import create_enhancer, EnhancementConfig
+        from face_swap.enhancement import EnhancementConfig, create_enhancer
+
         cfg = EnhancementConfig(method="gfpgan")
         enhancer = create_enhancer(cfg)
         assert enhancer is not None
@@ -312,30 +336,38 @@ class TestModelRouter:
 
     def test_scene_classification(self):
         from face_swap.core.model_router import ModelRouter, SceneType
+
         router = ModelRouter()
 
         scene = router.classify_scene(
-            num_faces=1, avg_face_size=200,
-            frame_shape=(720, 1280), max_yaw=5.0,
+            num_faces=1,
+            avg_face_size=200,
+            frame_shape=(720, 1280),
+            max_yaw=5.0,
         )
         assert scene == SceneType.PORTRAIT
 
     def test_group_scene(self):
         from face_swap.core.model_router import ModelRouter, SceneType
+
         router = ModelRouter()
 
         scene = router.classify_scene(
-            num_faces=4, avg_face_size=100,
-            frame_shape=(720, 1280), max_yaw=10.0,
+            num_faces=4,
+            avg_face_size=100,
+            frame_shape=(720, 1280),
+            max_yaw=10.0,
         )
         assert scene == SceneType.GROUP
 
     def test_model_selection(self):
         from face_swap.core.model_router import ModelRouter
+
         router = ModelRouter()
 
         profile = router.select_model(
-            num_faces=1, avg_face_size=150,
+            num_faces=1,
+            avg_face_size=150,
             frame_shape=(720, 1280),
         )
         assert profile is not None
@@ -346,13 +378,15 @@ class TestOpticalFlow:
     """Test advanced temporal consistency."""
 
     def test_smoother_creation(self):
-        from face_swap.temporal import OpticalFlowSmoother, OpticalFlowConfig
+        from face_swap.temporal import OpticalFlowConfig, OpticalFlowSmoother
+
         cfg = OpticalFlowConfig(method="farneback")
         smoother = OpticalFlowSmoother(cfg)
         assert smoother is not None
 
     def test_latent_smoothing(self):
         from face_swap.temporal import OpticalFlowSmoother
+
         smoother = OpticalFlowSmoother()
 
         latent = np.random.randn(512).astype(np.float32)
@@ -366,6 +400,7 @@ class TestOpticalFlow:
 
     def test_flow_smoother_first_frame(self, sample_image):
         from face_swap.temporal import OpticalFlowSmoother
+
         smoother = OpticalFlowSmoother()
 
         # First frame should pass through unchanged
@@ -378,6 +413,7 @@ class TestARFilters:
 
     def test_filter_preset(self):
         from face_swap.filters import FilterPreset, OverlayMode
+
         preset = FilterPreset(
             name="Test Filter",
             source_images=["test.jpg"],
@@ -388,6 +424,7 @@ class TestARFilters:
 
     def test_gallery_operations(self):
         from face_swap.filters import FilterGallery, FilterPreset
+
         gallery = FilterGallery()
 
         gallery.add(FilterPreset(name="A", source_images=["a.jpg"], tags=["fun"]))

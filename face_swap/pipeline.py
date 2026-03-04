@@ -16,25 +16,24 @@ Additionally integrates:
 - Invisible watermarking (PRD §6.3)
 """
 
-from typing import List, Optional, Callable, Union
-from dataclasses import dataclass
-import time
 import logging
-import numpy as np
-import cv2
+import time
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Union
 
-from .core.types import (
-    Frame, FaceBBox, Landmarks, AlignedFace,
-    Embedding, SwapResult, PipelineResult
-)
-from .core.quality import QualityValidator, QualityCode
-from .core.profiler import PipelineProfiler
-from .detection import FaceDetector, RetinaFaceDetector, AsyncFaceDetector
-from .landmarks import LandmarkDetector, MediaPipeLandmarkDetector
-from .embedding import IdentityEmbedder, ArcFaceEmbedder
+import cv2
+import numpy as np
+
 from .alignment import FaceAligner
-from .swap import FaceSwapper, InSwapperModel
 from .blending import FaceBlender
+from .core.profiler import PipelineProfiler
+from .core.quality import QualityCode, QualityValidator
+from .core.types import (AlignedFace, Embedding, FaceBBox, Frame, Landmarks,
+                         PipelineResult, SwapResult)
+from .detection import AsyncFaceDetector, FaceDetector, RetinaFaceDetector
+from .embedding import ArcFaceEmbedder, IdentityEmbedder
+from .landmarks import LandmarkDetector, MediaPipeLandmarkDetector
+from .swap import FaceSwapper, InSwapperModel
 from .temporal import TemporalSmoother
 from .watermark import InvisibleWatermarker, WatermarkConfig
 
@@ -126,8 +125,7 @@ class FaceSwapPipeline:
 
         # Detection
         raw_detector = RetinaFaceDetector(
-            confidence_threshold=cfg.det_confidence_threshold,
-            device=cfg.device
+            confidence_threshold=cfg.det_confidence_threshold, device=cfg.device
         )
 
         if cfg.async_detection:
@@ -152,20 +150,20 @@ class FaceSwapPipeline:
         if cfg.swap_model == "inswapper":
             self.swapper = InSwapperModel(
                 device=cfg.device,
-                model_path=cfg.swap_model_path or "./models/inswapper_128.onnx"
+                model_path=cfg.swap_model_path or "./models/inswapper_128.onnx",
             )
         else:
             from .swap import SimSwapModel
+
             self.swapper = SimSwapModel(
                 device=cfg.device,
                 resolution=cfg.crop_size,
-                model_path=cfg.swap_model_path
+                model_path=cfg.swap_model_path,
             )
 
         # Blender
         self.blender = FaceBlender(
-            blend_mode=cfg.blend_mode,
-            color_correction=cfg.color_correction
+            blend_mode=cfg.blend_mode, color_correction=cfg.color_correction
         )
 
         # Temporal smoother (for video)
@@ -232,7 +230,7 @@ class FaceSwapPipeline:
                 return PipelineResult(
                     output_frame=frame.copy(),
                     swap_results=[],
-                    processing_time_ms=processing_time
+                    processing_time_ms=processing_time,
                 )
             return frame.copy()
 
@@ -314,7 +312,7 @@ class FaceSwapPipeline:
             return PipelineResult(
                 output_frame=output_frame,
                 swap_results=swap_results,
-                processing_time_ms=timings.total_ms
+                processing_time_ms=timings.total_ms,
             )
 
         return output_frame
@@ -356,7 +354,8 @@ class FaceSwapPipeline:
         # Pre-swap quality gate
         if self.quality_validator is not None:
             bboxes = [
-                b for b in bboxes
+                b
+                for b in bboxes
                 if self.quality_validator.validate_detection(b, frame.shape[:2]).passed
             ]
         if not bboxes:
@@ -392,7 +391,7 @@ class FaceSwapPipeline:
                 result = self.swapper.swap(aligned, source_embedding)
 
                 # Temporal smoothing of appearance
-                track_id = getattr(bboxes[i], 'track_id', i)
+                track_id = getattr(bboxes[i], "track_id", i)
                 if self.temporal_smoother is not None:
                     result = self.temporal_smoother.smooth_swap_result(track_id, result)
 
@@ -450,10 +449,7 @@ class FaceSwapPipeline:
 
         return embedding
 
-    def extract_source_embedding_multi(
-        self,
-        source_images: List[Frame]
-    ) -> Embedding:
+    def extract_source_embedding_multi(self, source_images: List[Frame]) -> Embedding:
         """
         Extract averaged identity embedding from multiple source images.
 

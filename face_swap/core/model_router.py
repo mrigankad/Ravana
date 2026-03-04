@@ -11,10 +11,11 @@ This module provides:
   - Runtime model switching without pipeline restart.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Tuple
-from enum import Enum
 import logging
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 
 logger = logging.getLogger("face_swap.routing")
@@ -22,10 +23,11 @@ logger = logging.getLogger("face_swap.routing")
 
 class SceneType(Enum):
     """Detected scene category for model routing."""
-    PORTRAIT = "portrait"      # Single face, close-up
-    GROUP = "group"            # Multiple faces
+
+    PORTRAIT = "portrait"  # Single face, close-up
+    GROUP = "group"  # Multiple faces
     WIDE_ANGLE = "wide_angle"  # Small faces in wide shot
-    PROFILE = "profile"        # Side-view faces
+    PROFILE = "profile"  # Side-view faces
     UNKNOWN = "unknown"
 
 
@@ -183,7 +185,9 @@ class ModelRouter:
             logger.info(
                 "Model router: %s → %s (faces=%d, size=%.0f)",
                 self._current_profile.name if self._current_profile else "none",
-                best.name, num_faces, avg_face_size,
+                best.name,
+                num_faces,
+                avg_face_size,
             )
             self._current_profile = best
 
@@ -237,7 +241,8 @@ class ModelRouter:
     ) -> List[ModelProfile]:
         """Filter profiles by hard constraints."""
         return [
-            p for p in self._profiles
+            p
+            for p in self._profiles
             if p.max_faces >= num_faces
             and p.min_face_size <= avg_face_size
             and (scene_type == SceneType.UNKNOWN or scene_type in p.scene_types)
@@ -255,8 +260,7 @@ class ModelRouter:
         speed_weight = 1.0 - quality_weight
 
         score = (
-            quality_weight * profile.quality_score
-            + speed_weight * profile.speed_score
+            quality_weight * profile.quality_score + speed_weight * profile.speed_score
         )
 
         # Bonus: resolution matches face size well

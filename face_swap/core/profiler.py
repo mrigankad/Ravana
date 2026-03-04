@@ -11,14 +11,14 @@ Integrators can use this to validate that the system meets the
 ≤ 40 ms per-frame target on their hardware.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-from contextlib import contextmanager
-from collections import deque
-import time
-import statistics
 import json
 import logging
+import statistics
+import time
+from collections import deque
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("face_swap.profiler")
 
@@ -139,7 +139,9 @@ class PipelineProfiler:
         if not self._enabled:
             return StageTimings()
 
-        total = (time.perf_counter() - (self._frame_start or time.perf_counter())) * 1000
+        total = (
+            time.perf_counter() - (self._frame_start or time.perf_counter())
+        ) * 1000
 
         timings = StageTimings(
             detection_ms=self._current.get("detection", 0),
@@ -171,8 +173,14 @@ class PipelineProfiler:
         totals_sorted = sorted(totals)
 
         stage_names = [
-            "detection", "landmarks", "alignment", "embedding",
-            "swap", "blend", "temporal", "watermark",
+            "detection",
+            "landmarks",
+            "alignment",
+            "embedding",
+            "swap",
+            "blend",
+            "temporal",
+            "watermark",
         ]
         avg_stages = {}
         for s in stage_names:
@@ -187,7 +195,9 @@ class PipelineProfiler:
             p50_total_ms=totals_sorted[n // 2],
             p95_total_ms=totals_sorted[int(n * 0.95)],
             p99_total_ms=totals_sorted[int(n * 0.99)],
-            avg_fps=1000.0 / statistics.mean(totals) if statistics.mean(totals) > 0 else 0,
+            avg_fps=(
+                1000.0 / statistics.mean(totals) if statistics.mean(totals) > 0 else 0
+            ),
             avg_stage_ms=avg_stages,
             meets_target_pct=100.0 * meets / n,
         )

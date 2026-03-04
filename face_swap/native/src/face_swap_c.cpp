@@ -12,7 +12,7 @@
  *   cmake -B build -S . && cmake --build build
  */
 
-#include "include/face_swap.h"
+#include "face_swap.h"
 
 #include <cstring>
 #include <cstdlib>

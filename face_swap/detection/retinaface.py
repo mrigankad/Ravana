@@ -6,23 +6,24 @@ Supports detecting frontal and moderately profile faces (yaw up to ±45 degrees)
 """
 
 from typing import List, Optional
-import numpy as np
-import cv2
 
-from .base import FaceDetector
+import cv2
+import numpy as np
+
 from ..core.types import FaceBBox, Frame
+from .base import FaceDetector
 
 
 class RetinaFaceDetector(FaceDetector):
     """
     RetinaFace detector using InsightFace's implementation.
-    
+
     This detector provides:
     - High accuracy on faces with yaw up to ±45 degrees
     - Detection confidence scores
     - Bounding box coordinates
     """
-    
+
     def __init__(
         self,
         confidence_threshold: float = 0.5,
@@ -32,7 +33,7 @@ class RetinaFaceDetector(FaceDetector):
     ):
         """
         Initialize RetinaFace detector.
-        
+
         Args:
             confidence_threshold: Minimum confidence for face detection (0-1)
             device: Device to run inference on ("cuda" or "cpu")
@@ -43,7 +44,7 @@ class RetinaFaceDetector(FaceDetector):
         self.model_name = model_name
         self.det_size = det_size
         self._face_analysis = None
-    
+
     def load_model(self) -> None:
         """Load the RetinaFace model using InsightFace."""
         try:
@@ -54,47 +55,51 @@ class RetinaFaceDetector(FaceDetector):
                 "insightface is required for RetinaFace detection. "
                 "Install with: pip install insightface"
             )
-        
-        providers = ["CUDAExecutionProvider"] if self.device == "cuda" else ["CPUExecutionProvider"]
-        
-        self._face_analysis = FaceAnalysis(
-            name=self.model_name,
-            root="./models",
-            providers=providers
+
+        providers = (
+            ["CUDAExecutionProvider"]
+            if self.device == "cuda"
+            else ["CPUExecutionProvider"]
         )
-        self._face_analysis.prepare(ctx_id=0 if self.device == "cuda" else -1, det_size=self.det_size)
+
+        self._face_analysis = FaceAnalysis(
+            name=self.model_name, root="./models", providers=providers
+        )
+        self._face_analysis.prepare(
+            ctx_id=0 if self.device == "cuda" else -1, det_size=self.det_size
+        )
         self._model = self._face_analysis.det_model
-    
+
     def detect(self, frame: Frame) -> List[FaceBBox]:
         """
         Detect faces in a frame.
-        
+
         Args:
             frame: Input image/frame (H, W, C) in BGR format
-            
+
         Returns:
             List of FaceBBox objects sorted by confidence (highest first)
         """
         if self._face_analysis is None:
             self.load_model()
-        
+
         # InsightFace expects RGB
         if frame.shape[2] == 3:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         else:
             frame_rgb = frame
-        
+
         # Detect faces
         faces = self._face_analysis.get(frame_rgb)
-        
+
         results = []
         for face in faces:
             bbox = face.bbox.astype(int)
             confidence = float(face.det_score)
-            
+
             if confidence < self.confidence_threshold:
                 continue
-            
+
             face_bbox = FaceBBox(
                 x1=float(bbox[0]),
                 y1=float(bbox[1]),
@@ -103,39 +108,39 @@ class RetinaFaceDetector(FaceDetector):
                 confidence=confidence,
             )
             results.append(face_bbox)
-        
+
         # Sort by confidence (highest first)
         results.sort(key=lambda x: x.confidence, reverse=True)
         return results
-    
+
     def detect_with_landmarks(self, frame: Frame) -> List[tuple]:
         """
         Detect faces and return with landmarks.
-        
+
         Args:
             frame: Input image/frame
-            
+
         Returns:
             List of tuples (FaceBBox, landmarks_array)
         """
         if self._face_analysis is None:
             self.load_model()
-        
+
         if frame.shape[2] == 3:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         else:
             frame_rgb = frame
-        
+
         faces = self._face_analysis.get(frame_rgb)
-        
+
         results = []
         for face in faces:
             bbox = face.bbox.astype(int)
             confidence = float(face.det_score)
-            
+
             if confidence < self.confidence_threshold:
                 continue
-            
+
             face_bbox = FaceBBox(
                 x1=float(bbox[0]),
                 y1=float(bbox[1]),
@@ -143,8 +148,8 @@ class RetinaFaceDetector(FaceDetector):
                 y2=float(bbox[3]),
                 confidence=confidence,
             )
-            
-            landmarks = face.kps if hasattr(face, 'kps') else None
+
+            landmarks = face.kps if hasattr(face, "kps") else None
             results.append((face_bbox, landmarks))
-        
+
         return results

@@ -8,14 +8,15 @@ partially occluded, low resolution, or briefly out of frame by:
   - Providing clear error codes and logs for integration debugging.
 """
 
+import logging
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import Optional, Tuple
-import logging
-import numpy as np
-import cv2
 
-from .types import SwapResult, FaceBBox, AlignedFace, Frame
+import cv2
+import numpy as np
+
+from .types import AlignedFace, FaceBBox, Frame, SwapResult
 
 logger = logging.getLogger("face_swap.quality")
 

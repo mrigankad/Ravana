@@ -1,8 +1,8 @@
 """Face detection module supporting multiple backends."""
 
+from .async_detector import AsyncFaceDetector
 from .base import FaceDetector
 from .retinaface import RetinaFaceDetector
-from .async_detector import AsyncFaceDetector
 
 try:
     from .insightface_detector import InsightFaceDetector

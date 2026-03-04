@@ -12,12 +12,12 @@ This module provides:
   - Unified device abstraction for cross-platform code.
 """
 
-from typing import Optional, Tuple
-from dataclasses import dataclass
-import os
-import sys
 import logging
+import os
 import platform
+import sys
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 logger = logging.getLogger("face_swap.platform.apple")
 
@@ -25,6 +25,7 @@ logger = logging.getLogger("face_swap.platform.apple")
 @dataclass
 class AppleDeviceInfo:
     """Information about the Apple Silicon device."""
+
     chip_name: str = "Unknown"
     has_mps: bool = False
     has_ane: bool = False
@@ -54,9 +55,9 @@ def detect_apple_device() -> AppleDeviceInfo:
     # Check MPS availability (PyTorch backend)
     try:
         import torch
+
         info.has_mps = (
-            hasattr(torch.backends, "mps")
-            and torch.backends.mps.is_available()
+            hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
         )
     except ImportError:
         pass
@@ -64,6 +65,7 @@ def detect_apple_device() -> AppleDeviceInfo:
     # Check ANE via CoreML
     try:
         import coremltools
+
         info.has_ane = is_arm
     except ImportError:
         pass
@@ -72,9 +74,12 @@ def detect_apple_device() -> AppleDeviceInfo:
     if is_arm:
         try:
             import subprocess
+
             result = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 info.chip_name = result.stdout.strip()
@@ -84,9 +89,12 @@ def detect_apple_device() -> AppleDeviceInfo:
         # Memory
         try:
             import subprocess
+
             result = subprocess.run(
                 ["sysctl", "-n", "hw.memsize"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 info.unified_memory_gb = int(result.stdout.strip()) / (1 << 30)
@@ -106,6 +114,7 @@ def get_best_device() -> str:
     # Try CUDA first
     try:
         import torch
+
         if torch.cuda.is_available():
             return "cuda"
     except ImportError:
@@ -114,6 +123,7 @@ def get_best_device() -> str:
     # Try MPS (Apple Silicon)
     try:
         import torch
+
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             return "mps"
     except ImportError:
@@ -140,6 +150,7 @@ class CoreMLExporter:
         self._ct = None
         try:
             import coremltools
+
             self._ct = coremltools
         except ImportError:
             pass
@@ -179,9 +190,7 @@ class CoreMLExporter:
         # Convert ONNX to CoreML
         model = ct.converters.onnx.convert(
             model=onnx_path,
-            minimum_ios_deployment_target=(
-                minimum_deployment_target or "15"
-            ),
+            minimum_ios_deployment_target=(minimum_deployment_target or "15"),
         )
 
         # Set compute units preference
@@ -224,7 +233,8 @@ class CoreMLExporter:
 
         # Quantise to FP16 for ANE efficiency
         model_fp16 = ct.models.neural_network.quantization_utils.quantize_weights(
-            model, nbits=16,
+            model,
+            nbits=16,
         )
 
         model_fp16.save(output_path)

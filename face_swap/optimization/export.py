@@ -17,12 +17,12 @@ Usage:
     ... )
 """
 
+import logging
+import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Tuple, Dict
-import os
-import logging
-import time
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -70,6 +70,7 @@ class TensorRTExporter:
         """Lazy-import TensorRT (so the rest of the SDK works without it)."""
         try:
             import tensorrt as trt
+
             self._trt = trt
             self._logger = trt.Logger(trt.Logger.INFO)
         except ImportError:
@@ -119,7 +120,9 @@ class TensorRTExporter:
         if cfg.verbose:
             self._logger = trt.Logger(trt.Logger.VERBOSE)
 
-        logger.info("Exporting %s → %s (precision=%s)", onnx_path, engine_path, cfg.precision)
+        logger.info(
+            "Exporting %s → %s (precision=%s)", onnx_path, engine_path, cfg.precision
+        )
         start = time.time()
 
         # ── Parse ONNX ─────────────────────────────────────────────────
@@ -137,8 +140,12 @@ class TensorRTExporter:
         # Print network info
         n_inputs = network.num_inputs
         n_outputs = network.num_outputs
-        logger.info("Network: %d inputs, %d outputs, %d layers",
-                     n_inputs, n_outputs, network.num_layers)
+        logger.info(
+            "Network: %d inputs, %d outputs, %d layers",
+            n_inputs,
+            n_outputs,
+            network.num_layers,
+        )
         for i in range(n_inputs):
             inp = network.get_input(i)
             logger.info("  Input  %d: %-20s  shape=%s", i, inp.name, inp.shape)
@@ -170,8 +177,7 @@ class TensorRTExporter:
             # INT8 calibrator
             if cfg.calibration_data is None:
                 raise ValueError(
-                    "INT8 precision requires calibration_data path "
-                    "in ExportConfig."
+                    "INT8 precision requires calibration_data path " "in ExportConfig."
                 )
             calibrator = _ImageCalibrator(
                 data_dir=cfg.calibration_data,
@@ -215,6 +221,7 @@ class TensorRTExporter:
 
 # ── INT8 calibrator ─────────────────────────────────────────────────────
 
+
 class _ImageCalibrator:
     """
     Simple INT8 calibrator that reads images from a directory.
@@ -229,6 +236,7 @@ class _ImageCalibrator:
         input_shape: tuple = (1, 3, 128, 128),
     ):
         import glob
+
         self.batch_size = input_shape[0] if input_shape[0] > 0 else 1
         self.input_shape = input_shape
         self._images = sorted(
@@ -246,6 +254,7 @@ class _ImageCalibrator:
             return None
 
         import cv2
+
         try:
             import pycuda.driver as cuda
         except ImportError:

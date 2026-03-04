@@ -12,7 +12,7 @@ This package provides:
   - INT8/FP16 calibration helpers.
 """
 
-from .export import TensorRTExporter, ExportConfig
+from .export import ExportConfig, TensorRTExporter
 from .runtime import TensorRTRuntime
 
 __all__ = [

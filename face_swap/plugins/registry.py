@@ -11,10 +11,10 @@ This module provides:
   - Type-safe registration with interface validation.
 """
 
-from typing import Dict, List, Optional, Type, TypeVar, Any, Callable
-from dataclasses import dataclass, field
-import logging
 import importlib
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
 logger = logging.getLogger("face_swap.plugins")
 
@@ -27,7 +27,9 @@ class PluginInfo:
 
     name: str
     version: str
-    category: str  # "detector", "landmarks", "embedder", "swapper", "blender", "enhancer"
+    category: (
+        str  # "detector", "landmarks", "embedder", "swapper", "blender", "enhancer"
+    )
     cls: type
     description: str = ""
     author: str = ""
@@ -55,13 +57,13 @@ class PluginRegistry:
 
     # Known component categories and their expected base classes
     CATEGORIES = {
-        "detector":   "face_swap.detection.base.FaceDetector",
-        "landmarks":  "face_swap.landmarks.base.LandmarkDetector",
-        "embedder":   "face_swap.embedding.base.IdentityEmbedder",
-        "swapper":    "face_swap.swap.base.FaceSwapper",
-        "blender":    None,  # FaceBlender doesn't have a formal ABC yet
-        "enhancer":   "face_swap.enhancement.enhancer.FaceEnhancer",
-        "temporal":   None,
+        "detector": "face_swap.detection.base.FaceDetector",
+        "landmarks": "face_swap.landmarks.base.LandmarkDetector",
+        "embedder": "face_swap.embedding.base.IdentityEmbedder",
+        "swapper": "face_swap.swap.base.FaceSwapper",
+        "blender": None,  # FaceBlender doesn't have a formal ABC yet
+        "enhancer": "face_swap.enhancement.enhancer.FaceEnhancer",
+        "temporal": None,
     }
 
     def __init__(self):
@@ -90,7 +92,9 @@ class PluginRegistry:
         self._plugins[info.category][info.name] = info
         logger.info(
             "Registered plugin: %s v%s [%s]",
-            info.name, info.version, info.category,
+            info.name,
+            info.version,
+            info.category,
         )
 
     def unregister(self, category: str, name: str) -> None:
@@ -119,11 +123,7 @@ class PluginRegistry:
         """
         if category:
             return list(self._plugins.get(category, {}).values())
-        return [
-            info
-            for cat in self._plugins.values()
-            for info in cat.values()
-        ]
+        return [info for cat in self._plugins.values() for info in cat.values()]
 
     def get_preferred(self, category: str) -> Optional[type]:
         """
@@ -184,7 +184,9 @@ class PluginRegistry:
                     logger.warning("Failed to load plugin %s: %s", ep.name, e)
 
         except ImportError:
-            logger.debug("importlib.metadata not available; skipping entry point discovery.")
+            logger.debug(
+                "importlib.metadata not available; skipping entry point discovery."
+            )
 
         if count:
             logger.info("Discovered %d plugin(s) from entry points.", count)
@@ -232,31 +234,68 @@ def get_registry() -> PluginRegistry:
 
 def _register_builtins(registry: PluginRegistry) -> None:
     """Register built-in pipeline components as plugins."""
-    from ..detection.retinaface import RetinaFaceDetector
-    from ..landmarks.mediapipe_lm import MediaPipeLandmarkDetector
-    from ..embedding.arcface import ArcFaceEmbedder
-    from ..swap.inswapper import InSwapperModel
     from ..blending.blender import FaceBlender
+    from ..detection.retinaface import RetinaFaceDetector
+    from ..embedding.arcface import ArcFaceEmbedder
+    from ..landmarks.mediapipe_lm import MediaPipeLandmarkDetector
+    from ..swap.inswapper import InSwapperModel
 
     builtins = [
-        PluginInfo("retinaface", "0.1.0", "detector", RetinaFaceDetector,
-                   "RetinaFace via InsightFace", priority=10),
-        PluginInfo("mediapipe", "0.1.0", "landmarks", MediaPipeLandmarkDetector,
-                   "MediaPipe Face Mesh 468-point", priority=10),
-        PluginInfo("arcface", "0.1.0", "embedder", ArcFaceEmbedder,
-                   "ArcFace identity embedder", priority=10),
-        PluginInfo("inswapper", "0.1.0", "swapper", InSwapperModel,
-                   "InsightFace InSwapper 128×128", priority=10),
-        PluginInfo("opencv_blender", "0.1.0", "blender", FaceBlender,
-                   "OpenCV-based multi-mode blender", priority=10),
+        PluginInfo(
+            "retinaface",
+            "0.1.0",
+            "detector",
+            RetinaFaceDetector,
+            "RetinaFace via InsightFace",
+            priority=10,
+        ),
+        PluginInfo(
+            "mediapipe",
+            "0.1.0",
+            "landmarks",
+            MediaPipeLandmarkDetector,
+            "MediaPipe Face Mesh 468-point",
+            priority=10,
+        ),
+        PluginInfo(
+            "arcface",
+            "0.1.0",
+            "embedder",
+            ArcFaceEmbedder,
+            "ArcFace identity embedder",
+            priority=10,
+        ),
+        PluginInfo(
+            "inswapper",
+            "0.1.0",
+            "swapper",
+            InSwapperModel,
+            "InsightFace InSwapper 128×128",
+            priority=10,
+        ),
+        PluginInfo(
+            "opencv_blender",
+            "0.1.0",
+            "blender",
+            FaceBlender,
+            "OpenCV-based multi-mode blender",
+            priority=10,
+        ),
     ]
 
     # SimSwap (optional)
     try:
         from ..swap.simswap import SimSwapModel
+
         builtins.append(
-            PluginInfo("simswap", "0.1.0", "swapper", SimSwapModel,
-                       "SimSwap generator (256/512)", priority=5)
+            PluginInfo(
+                "simswap",
+                "0.1.0",
+                "swapper",
+                SimSwapModel,
+                "SimSwap generator (256/512)",
+                priority=5,
+            )
         )
     except ImportError:
         pass
@@ -266,6 +305,7 @@ def _register_builtins(registry: PluginRegistry) -> None:
 
 
 # ── Decorator for easy registration ──────────────────────────────────────
+
 
 def register_plugin(
     name: str,
@@ -283,6 +323,7 @@ def register_plugin(
         class MyCustomDetector(FaceDetector):
             ...
     """
+
     def decorator(cls):
         info = PluginInfo(
             name=name,
@@ -294,4 +335,5 @@ def register_plugin(
         )
         get_registry().register(info)
         return cls
+
     return decorator

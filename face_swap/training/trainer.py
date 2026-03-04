@@ -13,13 +13,13 @@ This module provides:
   - TensorBoard logging integration.
 """
 
+import json
+import logging
+import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Any
-import os
-import logging
-import json
-import time
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -117,7 +117,9 @@ class FaceSwapTrainer:
 
         logger.info(
             "Starting training: %d epochs, batch_size=%d, resolution=%d",
-            self.config.num_epochs, self.config.batch_size, self.config.resolution,
+            self.config.num_epochs,
+            self.config.batch_size,
+            self.config.resolution,
         )
 
         import torch
@@ -262,6 +264,7 @@ class FaceSwapTrainer:
         if cfg.tensorboard:
             try:
                 from torch.utils.tensorboard import SummaryWriter
+
                 self._writer = SummaryWriter(
                     log_dir=os.path.join(cfg.output_dir, "tensorboard")
                 )
@@ -285,25 +288,37 @@ class FaceSwapTrainer:
             def __init__(self, resolution: int = 256):
                 super().__init__()
                 self.encoder = nn.Sequential(
-                    nn.Conv2d(3, 64, 7, 1, 3), nn.InstanceNorm2d(64), nn.ReLU(True),
-                    nn.Conv2d(64, 128, 3, 2, 1), nn.InstanceNorm2d(128), nn.ReLU(True),
-                    nn.Conv2d(128, 256, 3, 2, 1), nn.InstanceNorm2d(256), nn.ReLU(True),
+                    nn.Conv2d(3, 64, 7, 1, 3),
+                    nn.InstanceNorm2d(64),
+                    nn.ReLU(True),
+                    nn.Conv2d(64, 128, 3, 2, 1),
+                    nn.InstanceNorm2d(128),
+                    nn.ReLU(True),
+                    nn.Conv2d(128, 256, 3, 2, 1),
+                    nn.InstanceNorm2d(256),
+                    nn.ReLU(True),
                 )
                 # ID injection via AdaIN-style modulation
                 self.id_proj = nn.Linear(512, 256 * 2)  # scale + shift
-                self.residual = nn.Sequential(
-                    *[self._res_block(256) for _ in range(6)]
-                )
+                self.residual = nn.Sequential(*[self._res_block(256) for _ in range(6)])
                 self.decoder = nn.Sequential(
-                    nn.ConvTranspose2d(256, 128, 4, 2, 1), nn.InstanceNorm2d(128), nn.ReLU(True),
-                    nn.ConvTranspose2d(128, 64, 4, 2, 1), nn.InstanceNorm2d(64), nn.ReLU(True),
-                    nn.Conv2d(64, 3, 7, 1, 3), nn.Tanh(),
+                    nn.ConvTranspose2d(256, 128, 4, 2, 1),
+                    nn.InstanceNorm2d(128),
+                    nn.ReLU(True),
+                    nn.ConvTranspose2d(128, 64, 4, 2, 1),
+                    nn.InstanceNorm2d(64),
+                    nn.ReLU(True),
+                    nn.Conv2d(64, 3, 7, 1, 3),
+                    nn.Tanh(),
                 )
 
             def _res_block(self, ch):
                 return nn.Sequential(
-                    nn.Conv2d(ch, ch, 3, 1, 1), nn.InstanceNorm2d(ch), nn.ReLU(True),
-                    nn.Conv2d(ch, ch, 3, 1, 1), nn.InstanceNorm2d(ch),
+                    nn.Conv2d(ch, ch, 3, 1, 1),
+                    nn.InstanceNorm2d(ch),
+                    nn.ReLU(True),
+                    nn.Conv2d(ch, ch, 3, 1, 1),
+                    nn.InstanceNorm2d(ch),
                 )
 
             def forward(self, target, embedding):
@@ -318,7 +333,9 @@ class FaceSwapTrainer:
                 return self.decoder(feat)
 
         model = SimpleGenerator(res).to(self.config.device)
-        logger.info("Generator: %d parameters", sum(p.numel() for p in model.parameters()))
+        logger.info(
+            "Generator: %d parameters", sum(p.numel() for p in model.parameters())
+        )
         return model
 
     def _build_discriminator(self):
@@ -329,10 +346,17 @@ class FaceSwapTrainer:
             def __init__(self):
                 super().__init__()
                 self.net = nn.Sequential(
-                    nn.Conv2d(3, 64, 4, 2, 1), nn.LeakyReLU(0.2, True),
-                    nn.Conv2d(64, 128, 4, 2, 1), nn.InstanceNorm2d(128), nn.LeakyReLU(0.2, True),
-                    nn.Conv2d(128, 256, 4, 2, 1), nn.InstanceNorm2d(256), nn.LeakyReLU(0.2, True),
-                    nn.Conv2d(256, 512, 4, 1, 1), nn.InstanceNorm2d(512), nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(3, 64, 4, 2, 1),
+                    nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(64, 128, 4, 2, 1),
+                    nn.InstanceNorm2d(128),
+                    nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(128, 256, 4, 2, 1),
+                    nn.InstanceNorm2d(256),
+                    nn.LeakyReLU(0.2, True),
+                    nn.Conv2d(256, 512, 4, 1, 1),
+                    nn.InstanceNorm2d(512),
+                    nn.LeakyReLU(0.2, True),
                     nn.Conv2d(512, 1, 4, 1, 1),
                 )
 
@@ -375,11 +399,11 @@ class FaceSwapTrainer:
 
             def __init__(self, root_dir, resolution):
                 import glob
+
                 self.resolution = resolution
-                self.image_paths = (
-                    glob.glob(os.path.join(root_dir, "**", "*.jpg"), recursive=True)
-                    + glob.glob(os.path.join(root_dir, "**", "*.png"), recursive=True)
-                )
+                self.image_paths = glob.glob(
+                    os.path.join(root_dir, "**", "*.jpg"), recursive=True
+                ) + glob.glob(os.path.join(root_dir, "**", "*.png"), recursive=True)
                 if not self.image_paths:
                     logger.warning("No images found in %s", root_dir)
 
@@ -407,15 +431,20 @@ class FaceSwapTrainer:
                 tgt = self._load(tgt_path)
 
                 return {
-                    "source": _torch.from_numpy(src).permute(2, 0, 1).float() / 127.5 - 1,
-                    "target": _torch.from_numpy(tgt).permute(2, 0, 1).float() / 127.5 - 1,
+                    "source": _torch.from_numpy(src).permute(2, 0, 1).float() / 127.5
+                    - 1,
+                    "target": _torch.from_numpy(tgt).permute(2, 0, 1).float() / 127.5
+                    - 1,
                 }
 
             def _load(self, path):
                 import cv2 as _cv2
+
                 img = _cv2.imread(path)
                 if img is None:
-                    img = np.zeros((self.resolution, self.resolution, 3), dtype=np.uint8)
+                    img = np.zeros(
+                        (self.resolution, self.resolution, 3), dtype=np.uint8
+                    )
                 return _cv2.resize(img, (self.resolution, self.resolution))
 
         dataset = FaceDataset(self.config.dataset_dir, self.config.resolution)
@@ -440,7 +469,13 @@ class FaceSwapTrainer:
         self._generator.train()
         self._discriminator.train()
 
-        running = {"g_total": 0.0, "g_id": 0.0, "g_rec": 0.0, "g_adv": 0.0, "d_loss": 0.0}
+        running = {
+            "g_total": 0.0,
+            "g_id": 0.0,
+            "g_rec": 0.0,
+            "g_adv": 0.0,
+            "d_loss": 0.0,
+        }
         n_batches = 0
 
         for batch in self._dataloader:

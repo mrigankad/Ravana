@@ -4,16 +4,14 @@ Tests for the config loader module.
 
 import tempfile
 from pathlib import Path
+
 import pytest
 import yaml
 
-from face_swap.core.config_loader import (
-    load_config,
-    load_pipeline_config,
-    load_face_swap_config,
-)
-from face_swap.pipeline import PipelineConfig
 from face_swap.api import FaceSwapConfig
+from face_swap.core.config_loader import (load_config, load_face_swap_config,
+                                          load_pipeline_config)
+from face_swap.pipeline import PipelineConfig
 
 
 @pytest.fixture
@@ -72,9 +70,7 @@ class TestLoadPipelineConfig:
         assert cfg.color_correction is False
 
     def test_overrides(self, sample_yaml):
-        cfg = load_pipeline_config(
-            sample_yaml, overrides={"device": "cuda"}
-        )
+        cfg = load_pipeline_config(sample_yaml, overrides={"device": "cuda"})
         assert cfg.device == "cuda"
 
 

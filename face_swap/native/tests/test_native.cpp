@@ -9,7 +9,7 @@
  *   ./build/fs_test_native
  */
 
-#include "include/face_swap.h"
+#include "face_swap.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>

@@ -21,89 +21,91 @@ Usage:
 import ctypes
 import ctypes.util
 import os
-import sys
 import platform
+import sys
 from pathlib import Path
 from typing import Optional
-import numpy as np
 
+import numpy as np
 
 # ── C type mirrors ───────────────────────────────────────────────────────
 
+
 class _FsConfig(ctypes.Structure):
     _fields_ = [
-        ("device",              ctypes.c_int),
-        ("quality",             ctypes.c_int),
-        ("blend_mode",          ctypes.c_int),
-        ("color_correction",    ctypes.c_int),
-        ("enable_temporal",     ctypes.c_int),
-        ("async_detection",     ctypes.c_int),
-        ("enable_watermark",    ctypes.c_int),
-        ("crop_size",           ctypes.c_int),
-        ("swap_model_path",     ctypes.c_char_p),
+        ("device", ctypes.c_int),
+        ("quality", ctypes.c_int),
+        ("blend_mode", ctypes.c_int),
+        ("color_correction", ctypes.c_int),
+        ("enable_temporal", ctypes.c_int),
+        ("async_detection", ctypes.c_int),
+        ("enable_watermark", ctypes.c_int),
+        ("crop_size", ctypes.c_int),
+        ("swap_model_path", ctypes.c_char_p),
         ("detection_model_path", ctypes.c_char_p),
     ]
 
 
 class _FsBBox(ctypes.Structure):
     _fields_ = [
-        ("x1",         ctypes.c_float),
-        ("y1",         ctypes.c_float),
-        ("x2",         ctypes.c_float),
-        ("y2",         ctypes.c_float),
+        ("x1", ctypes.c_float),
+        ("y1", ctypes.c_float),
+        ("x2", ctypes.c_float),
+        ("y2", ctypes.c_float),
         ("confidence", ctypes.c_float),
-        ("track_id",   ctypes.c_int),
+        ("track_id", ctypes.c_int),
     ]
 
 
 class _FsImage(ctypes.Structure):
     _fields_ = [
-        ("data",         ctypes.POINTER(ctypes.c_uint8)),
-        ("width",        ctypes.c_int),
-        ("height",       ctypes.c_int),
-        ("stride",       ctypes.c_int),
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("stride", ctypes.c_int),
         ("pixel_format", ctypes.c_int),
     ]
 
 
 class _FsImageMut(ctypes.Structure):
     _fields_ = [
-        ("data",         ctypes.POINTER(ctypes.c_uint8)),
-        ("width",        ctypes.c_int),
-        ("height",       ctypes.c_int),
-        ("stride",       ctypes.c_int),
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("stride", ctypes.c_int),
         ("pixel_format", ctypes.c_int),
     ]
 
 
 class _FsTimings(ctypes.Structure):
     _fields_ = [
-        ("detection_ms",  ctypes.c_float),
-        ("landmarks_ms",  ctypes.c_float),
-        ("alignment_ms",  ctypes.c_float),
-        ("swap_ms",       ctypes.c_float),
-        ("blend_ms",      ctypes.c_float),
-        ("total_ms",      ctypes.c_float),
-        ("num_faces",     ctypes.c_int),
+        ("detection_ms", ctypes.c_float),
+        ("landmarks_ms", ctypes.c_float),
+        ("alignment_ms", ctypes.c_float),
+        ("swap_ms", ctypes.c_float),
+        ("blend_ms", ctypes.c_float),
+        ("total_ms", ctypes.c_float),
+        ("num_faces", ctypes.c_int),
     ]
 
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-FS_OK                = 0
-FS_DEVICE_CPU        = 0
-FS_DEVICE_CUDA       = 1
-FS_QUALITY_LOW       = 0
-FS_QUALITY_MEDIUM    = 1
-FS_QUALITY_HIGH      = 2
-FS_BLEND_ALPHA       = 0
-FS_BLEND_POISSON     = 1
-FS_BLEND_FEATHER     = 2
-FS_PIXEL_BGR         = 0
-FS_PIXEL_RGB         = 1
+FS_OK = 0
+FS_DEVICE_CPU = 0
+FS_DEVICE_CUDA = 1
+FS_QUALITY_LOW = 0
+FS_QUALITY_MEDIUM = 1
+FS_QUALITY_HIGH = 2
+FS_BLEND_ALPHA = 0
+FS_BLEND_POISSON = 1
+FS_BLEND_FEATHER = 2
+FS_PIXEL_BGR = 0
+FS_PIXEL_RGB = 1
 
 
 # ── Wrapper class ────────────────────────────────────────────────────────
+
 
 class NativeFaceSwap:
     """High-level Python wrapper around the native C API."""
@@ -162,7 +164,9 @@ class NativeFaceSwap:
         cfg.detection_model_path = None
 
         handle = ctypes.c_void_p()
-        self._check(self._lib.fs_session_create(ctypes.byref(handle), ctypes.byref(cfg)))
+        self._check(
+            self._lib.fs_session_create(ctypes.byref(handle), ctypes.byref(cfg))
+        )
         return handle
 
     def destroy_session(self, session: ctypes.c_void_p) -> None:
@@ -171,18 +175,12 @@ class NativeFaceSwap:
     # ── Source ───────────────────────────────────────────────────────────
 
     def set_source_file(self, session: ctypes.c_void_p, path: str) -> None:
-        self._check(
-            self._lib.fs_session_set_source_file(session, path.encode("utf-8"))
-        )
+        self._check(self._lib.fs_session_set_source_file(session, path.encode("utf-8")))
 
-    def set_source_image(
-        self, session: ctypes.c_void_p, image: np.ndarray
-    ) -> None:
+    def set_source_image(self, session: ctypes.c_void_p, image: np.ndarray) -> None:
         """Set source from a numpy array (H, W, 3) BGR uint8."""
         fs_img = self._numpy_to_fs_image(image)
-        self._check(
-            self._lib.fs_session_set_source(session, ctypes.byref(fs_img))
-        )
+        self._check(self._lib.fs_session_set_source(session, ctypes.byref(fs_img)))
 
     # ── Swap ─────────────────────────────────────────────────────────────
 
@@ -197,9 +195,7 @@ class NativeFaceSwap:
             )
         )
 
-    def swap_image(
-        self, session: ctypes.c_void_p, target: np.ndarray
-    ) -> np.ndarray:
+    def swap_image(self, session: ctypes.c_void_p, target: np.ndarray) -> np.ndarray:
         """Swap face on a numpy image, return result."""
         h, w = target.shape[:2]
         ch = 3
@@ -336,7 +332,11 @@ class NativeFaceSwap:
         L.fs_session_set_source.argtypes = [ctypes.c_void_p, ctypes.POINTER(_FsImage)]
 
         L.fs_swap_image_file.restype = ctypes.c_int
-        L.fs_swap_image_file.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+        L.fs_swap_image_file.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.c_char_p,
+        ]
 
         L.fs_swap_image.restype = ctypes.c_int
         L.fs_swap_image.argtypes = [

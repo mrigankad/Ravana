@@ -15,10 +15,11 @@ so that the main swap loop is never blocked by the detector.
 import threading
 import time
 from typing import List, Optional
+
 import numpy as np
 
-from .base import FaceDetector
 from ..core.types import FaceBBox, Frame
+from .base import FaceDetector
 
 
 class AsyncFaceDetector:

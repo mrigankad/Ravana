@@ -1,7 +1,7 @@
 """Identity embedding module using ArcFace or similar models."""
 
-from .base import IdentityEmbedder
 from .arcface import ArcFaceEmbedder
+from .base import IdentityEmbedder
 
 __all__ = [
     "IdentityEmbedder",

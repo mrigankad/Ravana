@@ -11,11 +11,11 @@ This module provides:
   - Input/output shape validation for mobile constraints.
 """
 
-from dataclasses import dataclass
-from typing import Optional, List, Tuple, Dict
-from pathlib import Path
-import os
 import logging
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -130,6 +130,7 @@ class MobileExporter:
 
         # Cleanup
         import shutil
+
         shutil.rmtree(tf_dir, ignore_errors=True)
 
         size_mb = os.path.getsize(output_path) / (1 << 20)
@@ -171,11 +172,13 @@ class MobileExporter:
         # FP16 quantisation
         if cfg.precision == "fp16":
             model = ct.models.neural_network.quantization_utils.quantize_weights(
-                model, nbits=16,
+                model,
+                nbits=16,
             )
         elif cfg.precision == "int8":
             model = ct.models.neural_network.quantization_utils.quantize_weights(
-                model, nbits=8,
+                model,
+                nbits=8,
             )
 
         # Add metadata
@@ -232,10 +235,12 @@ class MobileExporter:
     @staticmethod
     def _make_representative_dataset(input_size: int):
         """Generate a representative dataset for INT8 calibration."""
+
         def gen():
             for _ in range(100):
                 data = np.random.randn(1, 3, input_size, input_size).astype(np.float32)
                 yield [data]
+
         return gen
 
     def get_model_info(self, model_path: str) -> Dict:
@@ -246,16 +251,25 @@ class MobileExporter:
         if ext == ".tflite":
             try:
                 import tensorflow as tf
+
                 interpreter = tf.lite.Interpreter(model_path=model_path)
                 interpreter.allocate_tensors()
                 inputs = interpreter.get_input_details()
                 outputs = interpreter.get_output_details()
                 info["inputs"] = [
-                    {"name": i["name"], "shape": i["shape"].tolist(), "dtype": str(i["dtype"])}
+                    {
+                        "name": i["name"],
+                        "shape": i["shape"].tolist(),
+                        "dtype": str(i["dtype"]),
+                    }
                     for i in inputs
                 ]
                 info["outputs"] = [
-                    {"name": o["name"], "shape": o["shape"].tolist(), "dtype": str(o["dtype"])}
+                    {
+                        "name": o["name"],
+                        "shape": o["shape"].tolist(),
+                        "dtype": str(o["dtype"]),
+                    }
                     for o in outputs
                 ]
             except ImportError:

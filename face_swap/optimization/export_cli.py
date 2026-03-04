@@ -15,10 +15,10 @@ Usage:
 """
 
 import argparse
-import sys
 import logging
+import sys
 
-from .export import TensorRTExporter, ExportConfig
+from .export import ExportConfig, TensorRTExporter
 
 
 def main():
@@ -28,11 +28,13 @@ def main():
     )
 
     parser.add_argument(
-        "--onnx", required=True,
+        "--onnx",
+        required=True,
         help="Path to source ONNX model",
     )
     parser.add_argument(
-        "--engine", required=True,
+        "--engine",
+        required=True,
         help="Path for output TensorRT engine",
     )
     parser.add_argument(
@@ -42,15 +44,20 @@ def main():
         help="Inference precision (default: fp16)",
     )
     parser.add_argument(
-        "--workspace", type=float, default=4.0,
+        "--workspace",
+        type=float,
+        default=4.0,
         help="Max workspace in GB (default: 4.0)",
     )
     parser.add_argument(
-        "--max-batch", type=int, default=1,
+        "--max-batch",
+        type=int,
+        default=1,
         help="Maximum batch size (default: 1)",
     )
     parser.add_argument(
-        "--dynamic", action="store_true",
+        "--dynamic",
+        action="store_true",
         help="Enable dynamic batch axes",
     )
     parser.add_argument(
@@ -58,15 +65,19 @@ def main():
         help="Path to calibration images directory (required for INT8)",
     )
     parser.add_argument(
-        "--calibration-count", type=int, default=500,
+        "--calibration-count",
+        type=int,
+        default=500,
         help="Number of calibration images (default: 500)",
     )
     parser.add_argument(
-        "--verbose", action="store_true",
+        "--verbose",
+        action="store_true",
         help="Enable verbose TensorRT logging",
     )
     parser.add_argument(
-        "--benchmark", action="store_true",
+        "--benchmark",
+        action="store_true",
         help="Run a quick latency benchmark after export",
     )
 
