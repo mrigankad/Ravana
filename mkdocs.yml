@@ -1,0 +1,81 @@
+site_name: Ravana
+site_description: Production-ready SDK for real-time face swapping
+site_author: Face Swap Team
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: material/brightness-7
+        name: Light mode
+    - scheme: default
+      primary: deep purple
+      accent: pink
+      toggle:
+        icon: material/brightness-4
+        name: Dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Configuration: getting-started/configuration.md
+  - API Reference:
+    - High-Level API: api/high-level.md
+    - Pipeline: api/pipeline.md
+    - Core Types: api/types.md
+    - Detection: api/detection.md
+    - Swap Models: api/swap.md
+    - Blending: api/blending.md
+    - Quality: api/quality.md
+    - Profiler: api/profiler.md
+  - Advanced:
+    - Custom Plugins: advanced/plugins.md
+    - Training Models: advanced/training.md
+    - TensorRT Optimization: advanced/tensorrt.md
+    - AR Filters: advanced/ar-filters.md
+    - Native C API: advanced/native-api.md
+    - Mobile Deployment: advanced/mobile.md
+  - Examples:
+    - Image Swap: examples/image-swap.md
+    - Video Swap: examples/video-swap.md
+    - Webcam Demo: examples/webcam.md
+    - Custom Plugin: examples/custom-plugin.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_heading: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html

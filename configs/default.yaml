@@ -1,0 +1,73 @@
+# Default configuration for Face Swap SDK
+# As per PRD Section 9.2
+
+# Device configuration
+device: cuda  # Options: cuda, cpu
+
+# Detection configuration
+detection:
+  model: retinaface
+  confidence_threshold: 0.5
+  det_size: [640, 640]
+
+# Landmark configuration
+landmarks:
+  model: mediapipe
+  static_image_mode: false
+  max_num_faces: 10
+  refine_landmarks: true
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+
+# Alignment configuration
+alignment:
+  crop_size: 256  # Options: 128, 256, 512
+  scale_factor: 1.0
+
+# Embedding configuration
+embedding:
+  model: arcface
+  model_name: buffalo_l
+  embedding_dim: 512
+
+# Swap model configuration
+swap:
+  model: inswapper  # Options: inswapper, simswap
+  model_path: ./models/inswapper_128.onnx
+  resolution: 128  # For inswapper: 128, for simswap: 256 or 512
+  use_enhancer: false
+
+# Blending configuration
+blending:
+  mode: alpha  # Options: alpha, poisson, feather
+  color_correction: true
+  feather_amount: 15
+
+# Temporal configuration (for video)
+temporal:
+  enabled: true
+  smooth_factor: 0.7
+  max_age: 5
+  iou_threshold: 0.3
+
+# Performance configuration
+performance:
+  batch_size: 1
+  enable_mixed_precision: true
+
+# Quality presets
+quality_presets:
+  low:
+    crop_size: 128
+    blend_mode: alpha
+    enable_temporal: false
+    
+  medium:
+    crop_size: 256
+    blend_mode: alpha
+    enable_temporal: true
+    
+  high:
+    crop_size: 256
+    blend_mode: feather
+    enable_temporal: true

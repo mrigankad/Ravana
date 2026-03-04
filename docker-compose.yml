@@ -1,0 +1,43 @@
+# Docker Compose for Ravana
+# Provides GPU-enabled service with model volume mount
+
+version: "3.8"
+
+services:
+  face-swap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: face-swap:latest
+    container_name: ravana
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+      - ./models:/app/models # Pre-trained model weights
+      - ./data:/data # Input/output data
+      - ./configs:/app/configs # Configuration files
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+    # Override entrypoint for different modes:
+    # Image swap:  docker compose run face-swap --mode image --source /data/src.jpg --target /data/tgt.jpg --output /data/out.jpg
+    # Video swap:  docker compose run face-swap --mode video --source /data/src.jpg --target /data/vid.mp4 --output /data/out.mp4
+    # Benchmark:   docker compose run face-swap python3 -m benchmarks.benchmark --device cuda
+
+    # Optional: TensorBoard for training monitoring
+  tensorboard:
+    image: tensorflow/tensorflow:latest
+    container_name: face-swap-tensorboard
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./training_output/tensorboard:/logs
+    command: tensorboard --logdir=/logs --host=0.0.0.0
+    profiles:
+      - training # Only starts with: docker compose --profile training up

@@ -1,0 +1,31 @@
+# Core dependencies
+numpy>=1.21.0
+opencv-python>=4.7.0
+Pillow>=9.0.0
+scipy>=1.7.0
+tqdm>=4.62.0
+pyyaml>=6.0
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+onnx>=1.14.0
+onnxruntime-gpu>=1.15.0
+
+# Face detection and processing
+insightface>=0.7.3
+mediapipe>=0.10.0
+
+# For video processing
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.8
+
+# For configuration
+pydantic>=2.0.0
+
+# Optional: for better performance
+numba>=0.57.0
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
