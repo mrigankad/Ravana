@@ -1,6 +1,6 @@
 # Ravana
 
-**Python face-swap SDK** for images, video, and webcam — ONNX Runtime on CUDA, AMD DirectML, or CPU.
+**Python face-swap SDK** for images, video, and webcam ONNX Runtime on CUDA, AMD DirectML, or CPU.
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
@@ -41,7 +41,7 @@ pip install -e ".[gpu]"       # NVIDIA
 pip install -e ".[directml]"  # AMD Windows
 ```
 
-**First run** — prefetch weights (or they download on first swap):
+**First run** prefetch weights (or they download on first swap):
 
 ```bash
 python scripts/first_run_check.py --download
@@ -111,6 +111,47 @@ Quality / device / restore / pixel-boost / face select, plus **Score** on the la
 
 ---
 
+## Comparisons
+
+Illustrative demo samples only (stock-style portraits). Not for identity claims — regenerate locally with the CLI.
+
+### Source → target → seamless
+
+| Source | Target | Seamless (`quality=seamless`) |
+|:------:|:------:|:-----------------------------:|
+| ![source](docs/assets/comparisons/woman1.jpg) | ![target](docs/assets/comparisons/man1.jpg) | ![seamless](docs/assets/comparisons/seamless_woman1_on_man1.jpg) |
+
+Also available: [GPEN restore](docs/assets/comparisons/gpen_woman1_on_man1.jpg) on the same pair.
+
+### Pixel boost 512 vs 1024
+
+| Boost 512 | Boost 1024 |
+|:---------:|:----------:|
+| ![512](docs/assets/comparisons/boost_512.jpg) | ![1024](docs/assets/comparisons/boost_1024.jpg) |
+
+### Face select: all vs largest
+
+| `face_select=all` | `face_select=largest` |
+|:-----------------:|:---------------------:|
+| ![all](docs/assets/comparisons/two_all.jpg) | ![largest](docs/assets/comparisons/two_largest.jpg) |
+
+### Metrics (local A/B, DirectML)
+
+`evaluate-batch` on `woman1 → man1`, pixel-boost 512:
+
+| Variant | ID similarity | Sharpness Δ | Time |
+|---------|--------------:|------------:|-----:|
+| GFPGAN | 0.309 | +16.9 | ~2.3 s |
+| OpenCV | 0.324 | +6.5 | ~0.37 s |
+
+Higher sharpness gain with GFPGAN; OpenCV is faster with slightly higher ArcFace ID on this pair. Re-run with your hardware:
+
+```bash
+python -m demos.cli evaluate-batch --pairs 1 --enhance gfpgan,opencv --boosts 512
+```
+
+---
+
 ## Pipeline
 
 ```mermaid
@@ -153,10 +194,10 @@ mkdocs serve
 
 For entertainment, VFX, privacy, and creative work **with consent**. Do not use for non-consensual deepfakes, impersonation, or fraud. You are responsible for complying with local law. Optional invisible DCT watermarking is available for provenance.
 
-Third-party model licenses (InsightFace, FaceFusion HyperSwap ResearchRAIL, GFPGAN/GPEN/etc.) apply to downloaded weights — review those before commercial use.
+Third-party model licenses (InsightFace, FaceFusion HyperSwap ResearchRAIL, GFPGAN/GPEN/etc.) apply to downloaded weights review those before commercial use.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT see [LICENSE](LICENSE).

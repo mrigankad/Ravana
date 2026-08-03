@@ -24,7 +24,8 @@ venv/
 .venv/
 .env
 
-# Models and data
+# Models and bulk local data (do not commit)
+# Weights auto-download via: python -m demos.cli models download --preset seamless
 models/
 data/
 *.onnx
@@ -32,6 +33,13 @@ data/
 *.pb
 *.tflite
 *.mlmodel
+
+# Small README / docs showcase assets are allowed under docs/
+# (docs/ is not ignored)
+
+# Webcam / CLI local dumps
+screenshot_*.jpg
+*.partial
 
 # macOS
 .DS_Store
@@ -45,6 +53,7 @@ data/
 htmlcov/
 .pytest_cache/
 coverage.xml
+pytest-cache-files-*/
 
 # Temporary files
 *.tmp
