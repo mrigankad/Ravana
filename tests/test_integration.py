@@ -82,7 +82,7 @@ class TestPipelineConfig:
         from face_swap.pipeline import PipelineConfig
 
         cfg = PipelineConfig()
-        assert cfg.device in ("cpu", "cuda")
+        assert cfg.device in ("cpu", "cuda", "dml", "auto")
         assert cfg.crop_size in (128, 256, 512)
 
     def test_config_from_yaml(self):

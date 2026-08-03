@@ -168,7 +168,7 @@ def main():
     )
     parser.add_argument(
         "-q", "--quality",
-        choices=["low", "medium", "high"],
+        choices=["low", "medium", "high", "seamless"],
         default="medium",
         help="Quality level (default: medium)"
     )
@@ -187,7 +187,13 @@ def main():
     parser.add_argument(
         "--cpu",
         action="store_true",
-        help="Use CPU instead of CUDA"
+        help="Force CPU instead of auto device selection"
+    )
+    parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu", "dml", "auto"],
+        default="auto",
+        help="Device: cuda, cpu, dml, or auto (default: auto)"
     )
     
     args = parser.parse_args()
@@ -201,7 +207,7 @@ def main():
     # Create config
     config = FaceSwapConfig(
         quality=args.quality,
-        device="cpu" if args.cpu else "cuda"
+        device="cpu" if args.cpu else args.device,
     )
     
     # Run demo

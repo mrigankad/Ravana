@@ -21,6 +21,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 .env
 
 # Models and data
@@ -48,3 +49,6 @@ coverage.xml
 # Temporary files
 *.tmp
 *.log
+run_log.txt
+run_log_utf8.txt
+run_log*.txt

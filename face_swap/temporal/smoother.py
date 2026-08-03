@@ -7,7 +7,7 @@ color, and position when processing video using optical flow and tracking.
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -302,3 +302,78 @@ class TemporalSmoother:
         self.prev_frame = None
         self.prev_gray = None
         self.tracker = FaceTracker()
+
+
+def _bbox_iou(a: np.ndarray, b: np.ndarray) -> float:
+    x1 = max(float(a[0]), float(b[0]))
+    y1 = max(float(a[1]), float(b[1]))
+    x2 = min(float(a[2]), float(b[2]))
+    y2 = min(float(a[3]), float(b[3]))
+    inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    if inter <= 0:
+        return 0.0
+    area_a = max(0.0, float(a[2] - a[0])) * max(0.0, float(a[3] - a[1]))
+    area_b = max(0.0, float(b[2] - b[0])) * max(0.0, float(b[3] - b[1]))
+    denom = area_a + area_b - inter
+    return float(inter / denom) if denom > 0 else 0.0
+
+
+def ema_smooth_insight_faces(
+    faces: List[Any],
+    prev_faces: Optional[List[Any]],
+    alpha: float = 0.35,
+    iou_threshold: float = 0.25,
+) -> List[Any]:
+    """
+    EMA-smooth InsightFace ``Face`` bbox + kps against the previous frame.
+
+    ``alpha`` is the weight on the *current* detection (0.35 ≈ mild temporal lag).
+    Unmatched faces pass through unchanged. Returns new face objects when possible.
+    """
+    if not faces:
+        return []
+    if not prev_faces:
+        return list(faces)
+
+    alpha = float(np.clip(alpha, 0.05, 1.0))
+    used_prev = set()
+    out: List[Any] = []
+
+    for face in faces:
+        bbox = np.asarray(face.bbox, dtype=np.float32)
+        best_i, best_iou = -1, iou_threshold
+        for i, pf in enumerate(prev_faces):
+            if i in used_prev:
+                continue
+            iou = _bbox_iou(bbox, np.asarray(pf.bbox, dtype=np.float32))
+            if iou > best_iou:
+                best_iou = iou
+                best_i = i
+
+        if best_i < 0:
+            out.append(face)
+            continue
+
+        used_prev.add(best_i)
+        prev = prev_faces[best_i]
+        try:
+            from insightface.app.common import Face
+
+            nf = Face(dict(face))
+        except Exception:
+            nf = face
+
+        pb = np.asarray(prev.bbox, dtype=np.float32)
+        nf.bbox = (alpha * bbox + (1.0 - alpha) * pb).astype(np.float32)
+
+        kps = getattr(face, "kps", None)
+        pkps = getattr(prev, "kps", None)
+        if kps is not None and pkps is not None:
+            k = np.asarray(kps, dtype=np.float32)
+            p = np.asarray(pkps, dtype=np.float32)
+            if k.shape == p.shape:
+                nf.kps = (alpha * k + (1.0 - alpha) * p).astype(np.float32)
+
+        out.append(nf)
+
+    return out

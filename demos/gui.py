@@ -56,7 +56,10 @@ class FaceSwapGUI:
         self._target_path: Optional[str] = None
         self._output_path: Optional[str] = None
         self._quality = tk.StringVar(value="medium")
-        self._device = tk.StringVar(value="cuda")
+        self._device = tk.StringVar(value="auto")
+        self._enhance = tk.StringVar(value="default")
+        self._pixel_boost = tk.StringVar(value="default")
+        self._face_select = tk.StringVar(value="all")
         self._processing = False
 
         self._build_ui()
@@ -83,7 +86,7 @@ class FaceSwapGUI:
         title_label.pack(side=tk.LEFT, padx=20, pady=10)
 
         version_label = tk.Label(
-            header, text="v0.2.0",
+            header, text="v0.3.0",
             font=("Segoe UI", 10),
             bg=self.ACCENT, fg="#aaaacc",
         )
@@ -202,7 +205,12 @@ class FaceSwapGUI:
         quality_frame = tk.Frame(parent, bg=self.CARD_BG)
         quality_frame.pack(**pad, fill=tk.X)
 
-        for val, label in [("low", "Fast"), ("medium", "Balanced"), ("high", "Quality")]:
+        for val, label in [
+            ("low", "Fast"),
+            ("medium", "Balanced"),
+            ("high", "Quality"),
+            ("seamless", "Seamless"),
+        ]:
             tk.Radiobutton(
                 quality_frame, text=label, variable=self._quality,
                 value=val, bg=self.CARD_BG, fg=self.FG_COLOR,
@@ -222,9 +230,87 @@ class FaceSwapGUI:
         device_frame = tk.Frame(parent, bg=self.CARD_BG)
         device_frame.pack(**pad, fill=tk.X)
 
-        for val, label in [("cuda", "GPU (CUDA)"), ("cpu", "CPU")]:
+        for val, label in [
+            ("auto", "Auto"),
+            ("dml", "AMD (DirectML)"),
+            ("cuda", "GPU (CUDA)"),
+            ("cpu", "CPU"),
+        ]:
             tk.Radiobutton(
                 device_frame, text=label, variable=self._device,
+                value=val, bg=self.CARD_BG, fg=self.FG_COLOR,
+                selectcolor=self.ACCENT,
+                font=("Segoe UI", 9),
+                activebackground=self.CARD_BG,
+            ).pack(side=tk.LEFT, padx=5)
+
+        # Enhancer override (mainly for seamless)
+        tk.Label(
+            parent, text="Restore (seamless):",
+            font=("Segoe UI", 9),
+            bg=self.CARD_BG, fg="#aaaacc",
+        ).pack(**pad, anchor=tk.W)
+
+        enhance_frame = tk.Frame(parent, bg=self.CARD_BG)
+        enhance_frame.pack(**pad, fill=tk.X)
+
+        for val, label in [
+            ("default", "Preset"),
+            ("gfpgan", "GFPGAN"),
+            ("gpen", "GPEN"),
+            ("codeformer", "CodeFormer"),
+            ("opencv", "OpenCV"),
+        ]:
+            tk.Radiobutton(
+                enhance_frame, text=label, variable=self._enhance,
+                value=val, bg=self.CARD_BG, fg=self.FG_COLOR,
+                selectcolor=self.ACCENT,
+                font=("Segoe UI", 9),
+                activebackground=self.CARD_BG,
+            ).pack(side=tk.LEFT, padx=5)
+
+        # Pixel boost (seamless restore resolution)
+        tk.Label(
+            parent, text="Pixel boost:",
+            font=("Segoe UI", 9),
+            bg=self.CARD_BG, fg="#aaaacc",
+        ).pack(**pad, anchor=tk.W)
+
+        boost_frame = tk.Frame(parent, bg=self.CARD_BG)
+        boost_frame.pack(**pad, fill=tk.X)
+
+        for val, label in [
+            ("default", "Preset"),
+            ("512", "512"),
+            ("1024", "1024"),
+            ("0", "Off"),
+        ]:
+            tk.Radiobutton(
+                boost_frame, text=label, variable=self._pixel_boost,
+                value=val, bg=self.CARD_BG, fg=self.FG_COLOR,
+                selectcolor=self.ACCENT,
+                font=("Segoe UI", 9),
+                activebackground=self.CARD_BG,
+            ).pack(side=tk.LEFT, padx=5)
+
+        # Face selection
+        tk.Label(
+            parent, text="Target face:",
+            font=("Segoe UI", 9),
+            bg=self.CARD_BG, fg="#aaaacc",
+        ).pack(**pad, anchor=tk.W)
+
+        face_frame = tk.Frame(parent, bg=self.CARD_BG)
+        face_frame.pack(**pad, fill=tk.X)
+
+        for val, label in [
+            ("all", "All"),
+            ("largest", "Largest"),
+            ("first", "First"),
+            ("pose", "Pose match"),
+        ]:
+            tk.Radiobutton(
+                face_frame, text=label, variable=self._face_select,
                 value=val, bg=self.CARD_BG, fg=self.FG_COLOR,
                 selectcolor=self.ACCENT,
                 font=("Segoe UI", 9),
@@ -341,53 +427,64 @@ class FaceSwapGUI:
             logger.exception("Swap failed")
             self.root.after(0, lambda: self._on_swap_error(str(e)))
 
+    def _make_config(self):
+        """Build FaceSwapConfig from UI controls."""
+        from face_swap import FaceSwapConfig
+
+        enhance = self._enhance.get()
+        boost = self._pixel_boost.get()
+        return FaceSwapConfig(
+            quality=self._quality.get(),
+            device=self._device.get(),
+            enhance_method=None if enhance == "default" else enhance,
+            pixel_boost=None if boost == "default" else int(boost),
+            face_select=self._face_select.get(),
+        )
+
     def _run_image_swap(self):
         """Process a single image swap."""
         import cv2
-        self.root.after(0, lambda: self.progress.configure(value=30))
+        from face_swap import swap_image
 
-        # Load images
+        self.root.after(0, lambda: self.progress.configure(value=20))
+        self.root.after(0, lambda: self._set_status("Loading images..."))
+
         source = cv2.imread(self._source_path)
         target = cv2.imread(self._target_path)
+        if source is None or target is None:
+            raise RuntimeError("Could not load source or target image")
 
-        self.root.after(0, lambda: self.progress.configure(value=60))
+        self.root.after(0, lambda: self.progress.configure(value=40))
+        self.root.after(0, lambda: self._set_status("Running face swap..."))
 
-        # For now, simulate (real pipeline would be plugged in here)
+        result = swap_image(source, target, self._make_config())
+
         self.root.after(0, lambda: self.progress.configure(value=90))
-
-        cv2.imwrite(self._output_path, target)
+        cv2.imwrite(self._output_path, result)
         self.root.after(0, lambda: self.progress.configure(value=100))
 
     def _run_video_swap(self):
         """Process a video swap with progress updates."""
-        import cv2
+        from face_swap import swap_video
 
-        cap = cv2.VideoCapture(self._target_path)
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.root.after(0, lambda: self._set_status("Processing video..."))
+        self.root.after(0, lambda: self.progress.configure(value=5))
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(self._output_path, fourcc, fps, (w, h))
+        def _progress(frame_i: int, total: int):
+            pct = int((frame_i / max(total, 1)) * 100)
+            self.root.after(0, lambda p=pct: self.progress.configure(value=p))
+            self.root.after(
+                0,
+                lambda i=frame_i, t=total: self._set_status(f"Frame {i}/{t}"),
+            )
 
-        for i in range(total):
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Process frame (real pipeline integration point)
-            writer.write(frame)
-
-            if i % 5 == 0:
-                pct = int((i / max(total, 1)) * 100)
-                self.root.after(0, lambda p=pct: self.progress.configure(value=p))
-                self.root.after(0, lambda i=i, t=total: self._set_status(
-                    f"Frame {i}/{t}"
-                ))
-
-        cap.release()
-        writer.release()
+        swap_video(
+            self._source_path,
+            self._target_path,
+            self._output_path,
+            self._make_config(),
+            progress_callback=_progress,
+        )
         self.root.after(0, lambda: self.progress.configure(value=100))
 
     def _on_swap_complete(self):
@@ -409,11 +506,23 @@ class FaceSwapGUI:
             messagebox.showwarning("Missing Input", "Please select a source face image first.")
             return
         self._set_status("Starting webcam...")
-        messagebox.showinfo(
-            "Webcam Mode",
-            "Webcam mode will open in a separate window.\n"
-            "Press 'q' to quit.",
-        )
+        try:
+            from demos.webcam_demo import WebcamDemo
+
+            demo = WebcamDemo(self._make_config())
+            import cv2
+
+            src = cv2.imread(self._source_path)
+            if src is None:
+                raise RuntimeError("Could not load source image")
+            demo.initialize(src)
+            # Blocks until user quits webcam window
+            demo.run(camera_id=0)
+            self._set_status("Webcam closed")
+        except Exception as e:
+            logger.exception("Webcam failed")
+            messagebox.showerror("Webcam Error", str(e))
+            self._set_status("Error")
 
     def _set_status(self, text: str):
         self.status_label.configure(text=text)

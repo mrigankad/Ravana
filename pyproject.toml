@@ -1,6 +1,80 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ravana"
+version = "0.3.0"
+description = "Real-Time Face Swapping System SDK"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [{ name = "Face Swap Team" }]
+keywords = ["face-swap", "computer-vision", "deepfake", "onnx", "realtime"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "numpy>=1.21.0",
+    "opencv-python>=4.7.0",
+    "Pillow>=9.0.0",
+    "scipy>=1.7.0",
+    "tqdm>=4.62.0",
+    "pyyaml>=6.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "onnx>=1.14.0",
+    "onnxruntime>=1.15.0",
+    "insightface>=0.7.3",
+    "mediapipe>=0.10.0",
+    "imageio>=2.31.0",
+    "imageio-ffmpeg>=0.4.8",
+    "pydantic>=2.0.0",
+    "numba>=0.57.0",
+]
+
+[project.optional-dependencies]
+gpu = ["onnxruntime-gpu>=1.15.0"]
+directml = ["onnxruntime-directml>=1.15.0"]
+training = ["tensorboard>=2.14.0"]
+enhancement = ["basicsr>=1.4.2", "gfpgan>=1.3.8", "realesrgan>=0.3.0"]
+tensorrt = ["tensorrt>=8.6.0"]
+docs = ["mkdocs-material>=9.0.0", "mkdocstrings[python]>=0.24.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+all = [
+    "ravana[gpu,training,enhancement,tensorrt,docs,dev]",
+]
+
+[project.scripts]
+face-swap = "demos.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/mrigankad/Ravana"
+Repository = "https://github.com/mrigankad/Ravana"
+Issues = "https://github.com/mrigankad/Ravana/issues"
+
+[tool.setuptools.packages.find]
+include = ["face_swap*", "demos*", "benchmarks*"]
+
 [tool.black]
 line-length = 88
-target-version = ['py39', 'py310']
+target-version = ["py39", "py310", "py311", "py312"]
 
 [tool.isort]
 profile = "black"

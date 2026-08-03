@@ -3,10 +3,17 @@ Tests for the model manager module.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from face_swap.core.model_manager import ModelInfo, ModelManager, ModelRegistry
+from face_swap.core.model_manager import (
+    MODEL_PRESETS,
+    ModelInfo,
+    ModelManager,
+    ModelRegistry,
+    ensure_downloaded,
+)
 
 
 @pytest.fixture
@@ -49,11 +56,17 @@ class TestModelManager:
     def test_default_models_registered(self, manager):
         models = manager.list_models()
         assert "inswapper" in models
+        assert "hyperswap" in models
+        assert "gfpgan" in models
+        assert "gpen" in models
+        assert "xseg" in models
+        assert "codeformer" in models
 
     def test_get_model(self, manager):
         info = manager.get_model("inswapper")
         assert info is not None
         assert info.name == "inswapper"
+        assert info.mirrors
 
     def test_unknown_model(self, manager):
         info = manager.get_model("nonexistent")
@@ -85,5 +98,104 @@ class TestModelManager:
 
     def test_rollback_no_previous(self, manager):
         result = manager.rollback("inswapper")
-        # Only one version registered by default, so rollback gives same
         assert result is None or result.version == "v0.7"
+
+    def test_status_rows(self, manager):
+        rows = manager.status()
+        by_name = {r["name"]: r for r in rows}
+        assert "hyperswap" in by_name
+        assert by_name["hyperswap"]["downloadable"] is True
+        assert by_name["simswap_256"]["downloadable"] is False
+
+    def test_presets(self, manager):
+        presets = manager.list_presets()
+        assert "seamless" in presets
+        assert "hyperswap" in presets["seamless"]
+        assert presets == MODEL_PRESETS
+
+    def test_ensure_model_skips_when_present(self, manager, tmp_models_dir):
+        info = manager.get_model("xseg")
+        assert info is not None
+        Path(info.path).parent.mkdir(parents=True, exist_ok=True)
+        Path(info.path).write_bytes(b"x" * (info.min_bytes + 10))
+
+        with patch(
+            "face_swap.core.model_manager._verify_sha256", return_value=True
+        ), patch(
+            "face_swap.core.model_manager.download_with_progress"
+        ) as dl:
+            out = manager.ensure_model("xseg", show_progress=False)
+            assert out.path == info.path
+            dl.assert_not_called()
+
+    def test_ensure_model_downloads(self, manager):
+        info = manager.get_model("xseg")
+        assert info is not None
+        assert not info.is_downloaded
+
+        def fake_dl(url, dest, **kwargs):
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(b"y" * (info.min_bytes + 5))
+
+        with patch(
+            "face_swap.core.model_manager.download_with_progress", side_effect=fake_dl
+        ):
+            out = manager.ensure_model("xseg", show_progress=False)
+        assert out.is_downloaded
+
+    def test_ensure_preset(self, manager):
+        called = []
+
+        def fake_ensure(name, version=None, **kwargs):
+            called.append(name)
+            info = manager.get_model(name)
+            assert info is not None
+            Path(info.path).parent.mkdir(parents=True, exist_ok=True)
+            Path(info.path).write_bytes(b"z" * (info.min_bytes + 1))
+            return info
+
+        with patch.object(manager, "ensure_model", side_effect=fake_ensure):
+            infos = manager.ensure_preset("seamless", show_progress=False)
+        assert called == MODEL_PRESETS["seamless"]
+        assert [i.name for i in infos] == MODEL_PRESETS["seamless"]
+
+
+class TestEnsureDownloaded:
+    def test_returns_existing(self, tmp_path):
+        path = tmp_path / "m.onnx"
+        path.write_bytes(b"a" * 2000)
+        with patch(
+            "face_swap.core.model_manager.download_with_progress"
+        ) as dl:
+            out = ensure_downloaded(
+                str(path), urls=["http://example/m.onnx"], min_bytes=1000, show_progress=False
+            )
+            assert out == str(path)
+            dl.assert_not_called()
+
+    def test_raises_without_urls(self, tmp_path):
+        path = tmp_path / "missing.onnx"
+        with pytest.raises(FileNotFoundError):
+            ensure_downloaded(str(path), urls=[], min_bytes=10, show_progress=False)
+
+    def test_tries_mirrors(self, tmp_path):
+        path = tmp_path / "m.onnx"
+        calls = []
+
+        def fake_dl(url, dest, **kwargs):
+            calls.append(url)
+            if "bad" in url:
+                raise OSError("fail")
+            Path(dest).write_bytes(b"ok" * 1000)
+
+        with patch(
+            "face_swap.core.model_manager.download_with_progress", side_effect=fake_dl
+        ):
+            ensure_downloaded(
+                str(path),
+                urls=["http://example/bad.onnx", "http://example/good.onnx"],
+                min_bytes=100,
+                show_progress=False,
+            )
+        assert len(calls) == 2
+        assert path.is_file()

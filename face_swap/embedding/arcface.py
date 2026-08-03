@@ -43,10 +43,10 @@ class ArcFaceEmbedder(IdentityEmbedder):
         """Load the ArcFace model using InsightFace."""
         try:
             from insightface.app import FaceAnalysis
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "insightface is required. Install with: pip install insightface"
-            )
+            ) from exc
 
         providers = (
             ["CUDAExecutionProvider"]
@@ -59,8 +59,11 @@ class ArcFaceEmbedder(IdentityEmbedder):
         )
         self._face_analysis.prepare(
             ctx_id=0 if self.device == "cuda" else -1,
-            det_size=(112, 112),  # ArcFace expects 112x112
+            det_size=(640, 640),
         )
+
+    def _recognition(self):
+        return self._face_analysis.models["recognition"]
 
     def extract(self, aligned_face: AlignedFace) -> Embedding:
         """
@@ -75,22 +78,15 @@ class ArcFaceEmbedder(IdentityEmbedder):
         if self._face_analysis is None:
             self.load_model()
 
-        # Get the face image
         face_img = aligned_face.image
+        input_size = int(self._recognition().input_size[0])
 
-        # ArcFace expects 112x112 RGB image
-        if face_img.shape[:2] != (112, 112):
-            face_img = cv2.resize(face_img, (112, 112))
+        # ArcFace expects input_size x input_size (usually 112)
+        if face_img.shape[:2] != (input_size, input_size):
+            face_img = cv2.resize(face_img, (input_size, input_size))
 
-        # Convert BGR to RGB if needed
-        if len(face_img.shape) == 3 and face_img.shape[2] == 3:
-            face_rgb = cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB)
-        else:
-            face_rgb = face_img
-
-        # Get embedding using recognition model directly
-        # InsightFace expects a batch of images
-        embedding = self._face_analysis.models["recognition"].get(face_rgb)
+        # get_feat expects BGR and handles RGB conversion via swapRB=True
+        embedding = self._recognition().get_feat(face_img).flatten()
 
         return Embedding(
             vector=embedding, model_name=f"arcface_{self.model_name}", normalized=True
@@ -112,24 +108,26 @@ class ArcFaceEmbedder(IdentityEmbedder):
         if self._face_analysis is None:
             self.load_model()
 
-        # Convert to RGB
-        if len(image.shape) == 3 and image.shape[2] == 3:
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        else:
-            image_rgb = image
+        faces = self._face_analysis.get(image)
+        if not faces:
+            raise ValueError("No face detected for embedding extraction")
 
+        face = faces[0]
         if bbox is not None:
-            # Crop to bbox
-            x1, y1, x2, y2 = map(int, bbox)
-            image_rgb = image_rgb[y1:y2, x1:x2]
+            x1, y1, x2, y2 = map(float, bbox)
+            target = np.array([(x1 + x2) / 2.0, (y1 + y2) / 2.0], dtype=np.float32)
+            best = face
+            best_dist = float("inf")
+            for candidate in faces:
+                fb = candidate.bbox.astype(np.float32)
+                center = np.array([(fb[0] + fb[2]) / 2.0, (fb[1] + fb[3]) / 2.0])
+                dist = float(np.linalg.norm(center - target))
+                if dist < best_dist:
+                    best_dist = dist
+                    best = candidate
+            face = best
 
-        # Resize to 112x112 if needed
-        if image_rgb.shape[:2] != (112, 112):
-            image_rgb = cv2.resize(image_rgb, (112, 112))
-
-        # Get embedding
-        embedding = self._face_analysis.models["recognition"].get(image_rgb)
-
+        embedding = np.asarray(face.embedding, dtype=np.float32).flatten()
         return Embedding(
             vector=embedding, model_name=f"arcface_{self.model_name}", normalized=True
         )

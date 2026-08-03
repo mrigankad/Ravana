@@ -53,12 +53,20 @@ class MediaPipeLandmarkDetector(LandmarkDetector):
         self._face_mesh = None
 
     def load_model(self) -> None:
-        """Load the MediaPipe Face Mesh model."""
+        """Load the MediaPipe Face Mesh model (legacy solutions API)."""
         try:
             import mediapipe as mp
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "mediapipe is required. Install with: pip install mediapipe"
+            ) from exc
+
+        # MediaPipe >= 1.0 removed mp.solutions in favor of the Tasks API.
+        if not hasattr(mp, "solutions"):
+            raise ImportError(
+                "Installed mediapipe no longer provides mp.solutions Face Mesh. "
+                "Use InsightFaceLandmarkDetector (pipeline default) or install "
+                "a legacy mediapipe wheel that still includes solutions."
             )
 
         self._mp_face_mesh = mp.solutions.face_mesh

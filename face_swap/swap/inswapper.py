@@ -1,33 +1,40 @@
 """
 InSwapper (InsightFace) face swap model.
 
-This uses the pre-trained inswapper_128.onnx or inswapper_128_fp16.onnx
-models from InsightFace, which are readily available.
+Implements the official InsightFace INSwapper path:
+  1. ArcFace ``norm_crop2`` alignment to 128x128 using 5-point kps
+  2. Latent = L2(normed_embedding @ emap)  (required — raw ArcFace is wrong)
+  3. Paste-back via inverse affine + eroded/blurred mask
+
+Reference:
+  https://github.com/deepinsight/insightface/blob/master/python-package/insightface/model_zoo/inswapper.py
 """
 
-from typing import Optional
+from __future__ import annotations
+
+import os
+from typing import Any, Optional
 
 import cv2
 import numpy as np
 
-from ..core.types import AlignedFace, Embedding, SwapResult
+from ..core.types import AlignedFace, Embedding, Frame, SwapResult
 from .base import FaceSwapper
 
 
 class InSwapperModel(FaceSwapper):
     """
-    InSwapper face swapping model from InsightFace.
+    Production InSwapper wrapper around InsightFace's ONNX model.
 
-    This is a practical implementation that uses readily available
-    pre-trained models (inswapper_128.onnx).
-
-    Model specs:
-    - Input: 128x128 face image
-    - ID embedding: 512-dim ArcFace embedding
-    - Output: 128x128 swapped face
+    Prefer ``swap_face(img, target_face, source_face)`` which uses the
+    official paste-back. The modular ``swap(AlignedFace, Embedding)`` path
+    is kept for plugin compatibility but is lower quality.
     """
 
-    DEFAULT_MODEL_URL = "https://github.com/deepinsight/insightface/releases/download/v0.7/inswapper_128.onnx"
+    DEFAULT_MODEL_URL = (
+        "https://github.com/deepinsight/insightface/releases/"
+        "download/v0.7/inswapper_128.onnx"
+    )
 
     def __init__(
         self,
@@ -35,66 +42,86 @@ class InSwapperModel(FaceSwapper):
         model_path: str = "./models/inswapper_128.onnx",
         resolution: int = 128,
     ):
-        """
-        Initialize InSwapper model.
-
-        Args:
-            device: Device to run inference on
-            model_path: Path to inswapper_128.onnx model
-            resolution: Model input/output resolution (128)
-        """
         super().__init__(device, resolution, use_enhancer=False)
         self.model_path = model_path
-        self._session = None
+        self._swapper = None  # insightface INSwapper instance
 
     def load_model(self, model_path: Optional[str] = None) -> None:
-        """
-        Load the InSwapper ONNX model.
-
-        Args:
-            model_path: Path to model file (defaults to self.model_path)
-        """
-        import os
-
         path = model_path or self.model_path
-
-        # Download model if not exists
         if not os.path.exists(path):
             self._download_model(path)
 
         try:
-            import onnxruntime as ort
-        except ImportError:
+            import insightface
+            from insightface.model_zoo.inswapper import INSwapper
+        except ImportError as exc:
             raise ImportError(
-                "onnxruntime is required. Install with: pip install onnxruntime-gpu"
+                "insightface is required. Install with: pip install insightface"
+            ) from exc
+
+        providers = None
+        try:
+            from face_swap.core.providers import resolve_ort_providers
+
+            providers = resolve_ort_providers(self.device)
+        except Exception:
+            providers = (
+                ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                if self.device == "cuda"
+                else ["CPUExecutionProvider"]
             )
 
-        providers = (
-            ["CUDAExecutionProvider"]
-            if self.device == "cuda"
-            else ["CPUExecutionProvider"]
-        )
+        try:
+            import onnxruntime as ort
+            from face_swap.core.fast_video import configure_ort_session_options
 
-        self._session = ort.InferenceSession(path, providers=providers)
+            opts = configure_ort_session_options(
+                intra_threads=4 if self.device == "cpu" else 0,
+                inter_threads=1,
+            )
+            session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+            self._swapper = INSwapper(model_file=path, session=session)
+        except Exception:
+            # Fallback: let insightface create the session
+            self._swapper = insightface.model_zoo.get_model(path)
 
-        # Get input/output info
-        self._input_names = [inp.name for inp in self._session.get_inputs()]
-        self._output_names = [out.name for out in self._session.get_outputs()]
-
-        # Expected inputs:
-        # - target: (1, 3, 128, 128) - target face
-        # - source: (1, 512) - source embedding
+        self._model = self._swapper
 
     def _download_model(self, path: str) -> None:
-        """Download pre-trained model if not available locally."""
-        import os
-        import urllib.request
+        from face_swap.core.model_manager import ensure_downloaded
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        ensure_downloaded(
+            path,
+            urls=[self.DEFAULT_MODEL_URL],
+            min_bytes=50_000_000,
+            label="InSwapper 128 ONNX (~550 MB)",
+        )
 
-        print(f"Downloading InSwapper model to {path}...")
-        urllib.request.urlretrieve(self.DEFAULT_MODEL_URL, path)
-        print("Download complete.")
+    def ensure_loaded(self) -> None:
+        if self._swapper is None:
+            self.load_model()
+
+    def swap_face(
+        self,
+        frame: Frame,
+        target_face: Any,
+        source_face: Any,
+        paste_back: bool = True,
+    ) -> Frame:
+        """
+        Official InsightFace swap with correct alignment + emap + paste-back.
+
+        Args:
+            frame: Full BGR target frame
+            target_face: InsightFace Face object (needs ``kps``)
+            source_face: InsightFace Face object (needs ``normed_embedding``)
+            paste_back: If True, return full composited frame
+
+        Returns:
+            Composited BGR frame (or 128x128 crop if paste_back=False)
+        """
+        self.ensure_loaded()
+        return self._swapper.get(frame, target_face, source_face, paste_back=paste_back)
 
     def swap(
         self,
@@ -102,148 +129,112 @@ class InSwapperModel(FaceSwapper):
         source_embedding: Embedding,
     ) -> SwapResult:
         """
-        Generate a swapped face.
+        Modular swap API (lower quality than ``swap_face``).
 
-        Args:
-            target_aligned: Aligned target face
-            source_embedding: Source identity embedding
-
-        Returns:
-            SwapResult with swapped face and mask
+        Uses emap transform and 128-aligned crop when possible. Paste-back
+        still depends on ``transformation_matrix`` being the ArcFace M matrix.
         """
-        if self._session is None:
-            self.load_model()
+        self.ensure_loaded()
 
-        # Prepare target image
         target_img = target_aligned.image
-
-        # Resize to 128x128
         if target_img.shape[:2] != (128, 128):
             target_img = cv2.resize(target_img, (128, 128))
 
-        # Preprocess target
-        target_tensor = self._preprocess_image(target_img)
+        # Official blob: BGR -> RGB via swapRB, scale 1/255
+        blob = cv2.dnn.blobFromImage(
+            target_img,
+            1.0 / 255.0,
+            (128, 128),
+            (0.0, 0.0, 0.0),
+            swapRB=True,
+        )
 
-        # Preprocess embedding
-        id_tensor = self._preprocess_embedding(source_embedding)
+        latent = source_embedding.vector.astype(np.float32).reshape(1, -1)
+        if latent.shape[1] != 512:
+            fixed = np.zeros((1, 512), dtype=np.float32)
+            n = min(512, latent.shape[1])
+            fixed[0, :n] = latent[0, :n]
+            latent = fixed
 
-        # Run inference
-        inputs = {self._input_names[0]: target_tensor, self._input_names[1]: id_tensor}
+        # Critical: apply model emap then L2-normalize
+        emap = getattr(self._swapper, "emap", None)
+        if emap is not None:
+            latent = np.dot(latent, emap)
+        norm = np.linalg.norm(latent)
+        if norm > 0:
+            latent = latent / norm
 
-        outputs = self._session.run(self._output_names, inputs)
+        pred = self._swapper.session.run(
+            self._swapper.output_names,
+            {
+                self._swapper.input_names[0]: blob,
+                self._swapper.input_names[1]: latent,
+            },
+        )[0]
 
-        # Post-process
-        swapped_face = self._postprocess_image(outputs[0])
+        img_fake = pred.transpose((0, 2, 3, 1))[0]
+        bgr_fake = np.clip(255 * img_fake, 0, 255).astype(np.uint8)[:, :, ::-1]
 
-        # Generate mask
-        mask = self.get_mask(swapped_face)
+        mask = self.get_mask(bgr_fake)
 
         return SwapResult(
-            swapped_face=swapped_face,
+            swapped_face=bgr_fake,
             mask=mask,
             source_embedding=source_embedding,
             target_aligned=target_aligned,
-            quality_score=0.85,  # InSwapper typically produces good quality
+            quality_score=0.9,
         )
 
-    def _preprocess_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Preprocess image for InSwapper input.
+    def paste_back(
+        self,
+        frame: Frame,
+        bgr_fake: np.ndarray,
+        aimg: np.ndarray,
+        M: np.ndarray,
+    ) -> Frame:
+        """Official InsightFace paste-back (erode + Gaussian soft mask)."""
+        fake_diff = np.abs(
+            bgr_fake.astype(np.float32) - aimg.astype(np.float32)
+        ).mean(axis=2)
+        fake_diff[:2, :] = 0
+        fake_diff[-2:, :] = 0
+        fake_diff[:, :2] = 0
+        fake_diff[:, -2:] = 0
 
-        Args:
-            image: Input image (H, W, C) BGR
+        IM = cv2.invertAffineTransform(M)
+        h, w = frame.shape[:2]
+        img_white = np.full((aimg.shape[0], aimg.shape[1]), 255, dtype=np.float32)
+        warped = cv2.warpAffine(bgr_fake, IM, (w, h), borderValue=0.0)
+        img_white = cv2.warpAffine(img_white, IM, (w, h), borderValue=0.0)
 
-        Returns:
-            Preprocessed array (1, 3, 128, 128)
-        """
-        # Convert BGR to RGB
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_white[img_white > 20] = 255
+        img_mask = img_white
+        mask_h_inds, mask_w_inds = np.where(img_mask == 255)
+        if len(mask_h_inds) == 0:
+            return frame
 
-        # Normalize to [0, 1]
-        image_norm = image_rgb.astype(np.float32) / 255.0
+        mask_h = int(np.max(mask_h_inds) - np.min(mask_h_inds))
+        mask_w = int(np.max(mask_w_inds) - np.min(mask_w_inds))
+        mask_size = int(np.sqrt(mask_h * mask_w))
+        k = max(mask_size // 10, 10)
+        img_mask = cv2.erode(img_mask, np.ones((k, k), np.uint8), iterations=1)
+        k = max(mask_size // 20, 5)
+        blur_size = tuple(2 * i + 1 for i in (k, k))
+        img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
+        img_mask = (img_mask / 255.0).astype(np.float32)
+        img_mask = img_mask[:, :, None]
 
-        # Transpose to (C, H, W) and add batch dimension
-        image_tensor = np.transpose(image_norm, (2, 0, 1))
-        image_tensor = np.expand_dims(image_tensor, axis=0)
-
-        return image_tensor
-
-    def _preprocess_embedding(self, embedding: Embedding) -> np.ndarray:
-        """
-        Preprocess embedding for InSwapper.
-
-        InSwapper expects 512-dim ArcFace embeddings.
-
-        Args:
-            embedding: Identity embedding
-
-        Returns:
-            Preprocessed embedding (1, 512)
-        """
-        vector = embedding.vector.astype(np.float32)
-
-        # Ensure correct dimension
-        if len(vector) != 512:
-            # Pad or truncate
-            if len(vector) < 512:
-                vector = np.pad(vector, (0, 512 - len(vector)))
-            else:
-                vector = vector[:512]
-
-        # Normalize if not already
-        norm = np.linalg.norm(vector)
-        if norm > 0:
-            vector = vector / norm
-
-        # Add batch dimension
-        return np.expand_dims(vector, axis=0)
-
-    def _postprocess_image(self, output: np.ndarray) -> np.ndarray:
-        """
-        Post-process model output.
-
-        Args:
-            output: Model output (1, 3, 128, 128)
-
-        Returns:
-            Output image (128, 128, 3) BGR
-        """
-        # Remove batch dimension
-        if output.ndim == 4:
-            output = output[0]
-
-        # Transpose from (C, H, W) to (H, W, C)
-        if output.shape[0] == 3:
-            output = np.transpose(output, (1, 2, 0))
-
-        # Denormalize from [0, 1] to [0, 255]
-        output = (output * 255).clip(0, 255).astype(np.uint8)
-
-        # Convert RGB to BGR
-        output = cv2.cvtColor(output, cv2.COLOR_RGB2BGR)
-
-        return output
+        merged = img_mask * warped.astype(np.float32) + (1.0 - img_mask) * frame.astype(
+            np.float32
+        )
+        return merged.astype(np.uint8)
 
     def get_mask(self, swapped_face: np.ndarray) -> np.ndarray:
-        """
-        Generate blending mask.
-
-        Args:
-            swapped_face: Swapped face image
-
-        Returns:
-            Soft mask (0-1)
-        """
         h, w = swapped_face.shape[:2]
-
-        # Create oval mask
-        center = (w // 2, int(h * 0.45))  # Slightly above center for face
-        axes = (w // 2 - 8, int(h * 0.45) - 8)
-
-        mask = np.zeros((h, w), dtype=np.float32)
-        cv2.ellipse(mask, center, axes, 0, 0, 360, 1.0, -1)
-
-        # Soften edges
-        mask = cv2.GaussianBlur(mask, (15, 15), 7)
-
-        return mask
+        mask = np.full((h, w), 255, dtype=np.float32)
+        k = max(h // 10, 10)
+        mask = cv2.erode(mask, np.ones((k, k), np.uint8), iterations=1)
+        k = max(h // 20, 5)
+        blur = tuple(2 * i + 1 for i in (k, k))
+        mask = cv2.GaussianBlur(mask, blur, 0)
+        return (mask / 255.0).astype(np.float32)

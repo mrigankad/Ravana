@@ -203,7 +203,20 @@ class AudioProcessor:
         if not self.available:
             return {}
 
-        ffprobe = self._ffmpeg.replace("ffmpeg", "ffprobe")
+        # Replace only the binary name. A naive str.replace("ffmpeg","ffprobe")
+        # breaks paths like .../ffmpeg-8.0.1-full_build/bin/ffmpeg.exe
+        ffmpeg_path = self._ffmpeg
+        dirname, basename = os.path.split(ffmpeg_path)
+        lower = basename.lower()
+        if lower.startswith("ffmpeg"):
+            probe_name = "ffprobe" + basename[len("ffmpeg") :]
+        else:
+            probe_name = "ffprobe"
+        ffprobe = os.path.join(dirname, probe_name)
+        if not os.path.exists(ffprobe):
+            # Fall back to PATH
+            ffprobe = shutil.which("ffprobe") or ffprobe
+
         cmd = [
             ffprobe,
             "-v",

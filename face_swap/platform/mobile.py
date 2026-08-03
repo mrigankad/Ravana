@@ -186,7 +186,7 @@ class MobileExporter:
         model.short_description = cfg.metadata.get(
             "description", "Face swap model for iOS"
         )
-        model.version = cfg.metadata.get("version", "0.2.0")
+        model.version = cfg.metadata.get("version", "0.3.0")
 
         model.save(output_path)
 

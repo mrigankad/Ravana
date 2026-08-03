@@ -27,7 +27,7 @@ class RetinaFaceDetector(FaceDetector):
         self,
         confidence_threshold: float = 0.5,
         device: str = "cuda",
-        model_name: str = "retinaface_r50_v1",
+        model_name: str = "buffalo_l",
         det_size: tuple = (640, 640),
     ):
         """
@@ -36,7 +36,8 @@ class RetinaFaceDetector(FaceDetector):
         Args:
             confidence_threshold: Minimum confidence for face detection (0-1)
             device: Device to run inference on ("cuda" or "cpu")
-            model_name: Name of the RetinaFace model
+            model_name: InsightFace model pack (default buffalo_l includes
+                RetinaFace detection + ArcFace recognition)
             det_size: Input size for detection network
         """
         super().__init__(confidence_threshold, device)
@@ -60,6 +61,8 @@ class RetinaFaceDetector(FaceDetector):
             else ["CPUExecutionProvider"]
         )
 
+        # buffalo_l is the maintained InsightFace pack (det + recognition).
+        # Older packs like retinaface_r50_v1 are no longer published (404).
         self._face_analysis = FaceAnalysis(
             name=self.model_name, root="./models", providers=providers
         )

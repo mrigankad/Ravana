@@ -21,7 +21,7 @@ Ravana provides a modular, high-performance pipeline for face swapping with:
 ```python
 from face_swap import swap_image, FaceSwapConfig
 
-config = FaceSwapConfig(quality="high", device="cuda")
+config = FaceSwapConfig(quality="seamless", device="auto")
 result = swap_image("source.jpg", "target.jpg", config)
 ```
 

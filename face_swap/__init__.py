@@ -4,16 +4,22 @@ Face Swap SDK - Real-Time Face Swapping System
 A production-ready SDK for face swapping on images, pre-recorded video, and live webcam streams.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "Face Swap Team"
 
 from .api import FaceSwapConfig, batch_swap, start_realtime_swap, swap_image, swap_video
 from .audio import AudioProcessor
 from .core.config_loader import load_config, load_face_swap_config, load_pipeline_config
-from .core.model_manager import ModelInfo, ModelManager
+from .core.model_manager import (
+    MODEL_PRESETS,
+    ModelInfo,
+    ModelManager,
+    ensure_downloaded,
+)
 from .core.model_router import ModelProfile, ModelRouter, SceneType
 from .core.profiler import BenchmarkReport, PipelineProfiler, StageTimings
 from .core.quality import QualityCode, QualityReport, QualityValidator
+from .core.metrics import MetricsAnalyzer, SwapMetrics, evaluate_swap
 from .core.types import (
     AlignedFace,
     Embedding,
@@ -29,6 +35,8 @@ from .enhancement import (
     EnhancementConfig,
     FaceEnhancer,
     GFPGANEnhancer,
+    GFPGANOnnxEnhancer,
+    GPENOnnxEnhancer,
     RealESRGANEnhancer,
     create_enhancer,
 )
@@ -81,6 +89,9 @@ __all__ = [
     "QualityValidator",
     "QualityCode",
     "QualityReport",
+    "SwapMetrics",
+    "MetricsAnalyzer",
+    "evaluate_swap",
     # Profiling
     "PipelineProfiler",
     "StageTimings",
@@ -88,6 +99,8 @@ __all__ = [
     # Models
     "ModelManager",
     "ModelInfo",
+    "MODEL_PRESETS",
+    "ensure_downloaded",
     "ModelRouter",
     "ModelProfile",
     "SceneType",
@@ -102,6 +115,8 @@ __all__ = [
     "FaceEnhancer",
     "EnhancementConfig",
     "GFPGANEnhancer",
+    "GFPGANOnnxEnhancer",
+    "GPENOnnxEnhancer",
     "RealESRGANEnhancer",
     "CodeFormerEnhancer",
     "create_enhancer",

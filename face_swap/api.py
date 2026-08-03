@@ -12,6 +12,7 @@ from typing import Callable, List, Optional, Union
 
 import cv2
 
+from .core.fast_video import FastVideoConfig
 from .core.types import AlignedFace, Embedding, FaceBBox, Frame, Landmarks, SwapResult
 from .pipeline import FaceSwapPipeline, PipelineConfig
 
@@ -25,10 +26,10 @@ class FaceSwapConfig:
     """
 
     # Quality/Speed tradeoff
-    quality: str = "high"  # "low", "medium", "high"
+    quality: str = "high"  # "low" | "fast_cpu" | "medium" | "high" | "seamless"
 
-    # Device
-    device: str = "cuda"  # "cuda", "cpu"
+    # Device: "cuda", "cpu", "dml"/"directml"/"amd" (Windows DirectML), "auto"
+    device: str = "auto"
 
     # Processing options
     color_correction: bool = True
@@ -38,6 +39,20 @@ class FaceSwapConfig:
     detection_model_path: Optional[str] = None
     swap_model_path: Optional[str] = None
 
+    # Explicit CPU realtime mode (overrides quality presets for video)
+    fast_cpu: bool = False
+    detect_every_n: int = 3
+
+    # Optional overrides (None = use quality preset defaults)
+    enhance_method: Optional[str] = None
+    swap_model: Optional[str] = None  # inswapper | hyperswap
+    pixel_boost: Optional[int] = None  # 0 off; seamless default 1024
+
+    # Target face selection: all | largest | first | index | pose
+    face_select: str = "all"
+    face_index: int = 0
+    max_faces: int = 0  # 0 = unlimited
+
     def to_pipeline_config(self) -> PipelineConfig:
         """Convert to internal PipelineConfig."""
         config = PipelineConfig(
@@ -45,25 +60,82 @@ class FaceSwapConfig:
             color_correction=self.color_correction,
         )
 
-        # Quality presets
-        if self.quality == "low":
+        # Quality presets — InSwapper is always 128 (ArcFace crop size).
+        if self.quality == "low" or self.quality == "fast_cpu" or self.fast_cpu:
             config.crop_size = 128
             config.blend_mode = "alpha"
             config.enable_temporal = False
+            config.enable_enhance = False
+            config.enable_color_match = not self.fast_cpu and self.quality != "fast_cpu"
+            config.fast_video = FastVideoConfig(
+                enabled=True,
+                detect_every_n=self.detect_every_n if self.device == "cpu" or self.fast_cpu or self.quality == "fast_cpu" else 1,
+                det_size=(320, 320),
+                detect_max_side=640,
+                skip_enhance=True,
+                skip_color_match=self.fast_cpu or self.quality == "fast_cpu",
+                max_faces=1,
+                ort_intra_threads=4,
+            )
         elif self.quality == "medium":
-            config.crop_size = 256
+            config.crop_size = 128
             config.blend_mode = "alpha"
             config.enable_temporal = self.enable_smoothing
-        else:  # high
-            config.crop_size = 256
+            config.enable_color_match = True
+            config.enable_enhance = True
+            config.enhance_method = "opencv"
+        elif self.quality == "seamless":
+            # FaceFusion-style stack: HyperSwap-256 + GFPGAN + XSeg + lighting
+            config.crop_size = 128
+            config.swap_model = "hyperswap"
             config.blend_mode = "feather"
             config.enable_temporal = self.enable_smoothing
+            config.enable_color_match = True
+            config.enable_enhance = True
+            config.enhance_method = "gfpgan"
+            config.enhance_blend = 0.70
+            config.enhance_target_px = 1024  # FaceFusion-style tiled pixel boost
+            config.use_occlusion_mask = True
+            config.color_match_strength = 1.0
+            config.preserve_lower_face = "auto"
+            config.enable_grain_match = True
+            config.use_xseg_occlusion = True
+            config.enable_lighting_match = True
+            config.lighting_match_strength = 0.75
+            # Video temporal: detect every 2nd frame + flow blend + face EMA
+            config.video_detect_every_n = 2
+            config.video_face_ema_alpha = 0.35
+            config.video_flow_blend = 0.28
+        else:  # high
+            config.crop_size = 128
+            config.blend_mode = "feather"
+            config.enable_temporal = self.enable_smoothing
+            config.enable_color_match = True
+            config.enable_enhance = True
+            config.enhance_method = "opencv"
+            config.color_match_strength = 1.0
+
+        config.use_native_inswapper = True
+        config.enable_quality_gate = False
+
+        if self.enhance_method:
+            config.enhance_method = self.enhance_method
+            config.enable_enhance = True
+
+        if self.swap_model:
+            config.swap_model = self.swap_model
 
         if self.swap_model_path:
             config.swap_model_path = self.swap_model_path
 
-        return config
+        if self.pixel_boost is not None:
+            config.enhance_target_px = max(0, int(self.pixel_boost))
 
+        config.face_select = self.face_select
+        config.face_index = int(self.face_index)
+        config.max_faces = int(self.max_faces or 0)
+
+        return config
 
 def swap_image(
     source_img: Union[str, Frame],
@@ -144,7 +216,17 @@ def swap_video(
     # Use default config if not provided
     cfg = config or FaceSwapConfig()
     pipeline_config = cfg.to_pipeline_config()
-    pipeline_config.enable_temporal = True  # Always enable for video
+    # Video: enable temporal unless fast_cpu (reuse detections instead)
+    if not (cfg.fast_cpu or cfg.quality == "fast_cpu"):
+        pipeline_config.enable_temporal = True
+        if pipeline_config.video_detect_every_n < 2 and cfg.quality in (
+            "seamless",
+            "high",
+            "medium",
+        ):
+            pipeline_config.video_detect_every_n = 2
+        if pipeline_config.video_flow_blend <= 0:
+            pipeline_config.video_flow_blend = 0.25
 
     # Create pipeline
     pipeline = FaceSwapPipeline(pipeline_config)
@@ -220,11 +302,21 @@ def start_realtime_swap(
             raise ValueError(f"Could not load source image: {source_img}")
 
     # Use fast config for real-time if not specified
-    cfg = config or FaceSwapConfig(quality="medium", device="cuda")
+    cfg = config or FaceSwapConfig(
+        quality="fast_cpu", device="cpu", fast_cpu=True, enable_smoothing=False
+    )
 
     # Create pipeline
     pipeline_config = cfg.to_pipeline_config()
-    pipeline_config.enable_temporal = True
+    if cfg.device == "cpu" or cfg.fast_cpu:
+        pipeline_config.fast_video = pipeline_config.fast_video or FastVideoConfig(
+            enabled=True, detect_every_n=cfg.detect_every_n, skip_enhance=True
+        )
+        if pipeline_config.fast_video:
+            pipeline_config.fast_video.enabled = True
+            pipeline_config.fast_video.skip_enhance = True
+    else:
+        pipeline_config.enable_temporal = True
     pipeline = FaceSwapPipeline(pipeline_config)
 
     # Extract source embedding

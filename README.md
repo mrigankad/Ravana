@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/assets/mascot.png" width="300" alt="Ravana Mascot">
-  <h1>🔄 Ravana v1.0.0</h1>
+  <h1>Ravana v0.3.0</h1>
   <p><b>A production-ready, high-performance SDK for real-time face swapping on images, video, and live webcam streams.</b></p>
 
   [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
@@ -16,13 +16,13 @@
 Ravana provides a modular, easily extensible pipeline capable of running on edge devices or highly-optimized cloud infrastructure.
 
 - **📷 Universal Input**: Seamlessly swap faces in static images, pre-recorded videos, and live webcam streams.
-- **⚡ Real-Time Performance**: Achieves ≤ 40ms per frame latency on modern GPUs using TensorRT and CUDA optimizations.
-- **🎭 AR Filters & Enhancements**: Built-in AR overlays, background blur, and GAN-based face restoration (GFPGAN/RealESRGAN).
-- **⏱️ Temporal Consistency**: Advanced optical flow (Farneback/RAFT) and latent space smoothing for flicker-free video.
-- **🛡️ Quality & Security**: Invisible DCT watermarking for provenance and automatic quality gates rejecting poor swaps.
-- **🔌 Highly Extensible**: Hot-swappable plugin system to integrate custom detectors, blenders, or tracking models.
-- **💻 Desktop GUI & CLI**: Ships with a fully-featured Tkinter GUI and powerful command-line interfaces.
-- **📱 Cross-Platform**: Supports Windows/Linux (CUDA), macOS (Metal/MPS), and provides TFLite/CoreML export helpers for Android and iOS.
+- **⚡ Real-Time Performance**: Fast CPU path + ONNX Runtime (CUDA / AMD DirectML / CPU); TensorRT hooks available.
+- **🎭 Quality Stack**: `quality="seamless"` — HyperSwap-256, GFPGAN or CodeFormer restore, XSeg occlusion, lighting match.
+- **⏱️ Temporal Consistency**: Optical flow and latent smoothing for flicker-free video.
+- **🛡️ Quality & Security**: Invisible DCT watermarking for provenance and optional quality gates.
+- **🔌 Highly Extensible**: Hot-swappable plugin system for custom detectors, blenders, or tracking models.
+- **💻 Desktop GUI & CLI**: Tkinter GUI and CLI with quality / device / enhance controls.
+- **📱 Cross-Platform**: Windows/Linux (CUDA or DirectML), macOS; TFLite/CoreML export helpers for mobile.
 
 ---
 
@@ -43,9 +43,9 @@ graph TD
         LMK[Landmarks<br/><i>MediaPipe Mesh</i>]
         ALN[Alignment<br/><i>Affine Transform</i>]
         EMB[Identity Embedding<br/><i>ArcFace 512-d</i>]
-        SWP[Face Generation<br/><i>InSwapper/SimSwap</i>]
-        ENH[Enhancement<br/><i>GFPGAN</i>]
-        BLD[Blending<br/><i>Poisson/Alpha</i>]
+        SWP[Face Generation<br/><i>HyperSwap / InSwapper</i>]
+        ENH[Enhancement<br/><i>GFPGAN / CodeFormer</i>]
+        BLD[Blending<br/><i>XSeg + lighting</i>]
     end
 
     subgraph "Post-Processing & Output"
@@ -79,20 +79,32 @@ graph TD
 
 ## 🛠️ Installation
 
-Ravana requires Python 3.9+ and relies heavily on PyTorch and OpenCV. A CUDA-capable GPU is highly recommended for real-time inference.
+Ravana requires Python 3.9+ and OpenCV / ONNX Runtime. A GPU is recommended (NVIDIA CUDA or AMD DirectML on Windows).
 
 ### Option A: Standard PyPI Install
 ```bash
-git clone https://github.com/your-org/ravana.git
-cd ravana
+git clone https://github.com/mrigankad/Ravana.git
+cd Ravana
 
-# Install core SDK
+# Install core SDK (CPU onnxruntime)
 pip install -e .
 
-# Install with all optional modules (Training, TensorRT, Enhancement)
+# NVIDIA GPU
+pip install -e ".[gpu]"
+
+# AMD Windows (DirectML) — replaces onnxruntime with onnxruntime-directml
+pip install -e ".[directml]"
+
+# Optional: training / TensorRT / docs
 pip install -e ".[all]"
 ```
 
+Face restore models (GFPGAN / CodeFormer / HyperSwap / XSeg) **auto-download** as ONNX on first use — no `basicsr` required on Python 3.13. Prefetch them with:
+
+```bash
+python -m demos.cli models list
+python -m demos.cli models download --preset seamless
+```
 ### Option B: Docker (Recommended for Linux/Servers)
 Includes a multi-stage Dockerfile that compiles the native C++ library and installs all PyTorch/CUDA dependencies.
 
@@ -116,18 +128,17 @@ The High-Level API makes it incredibly simple to run a swap in just a few lines 
 import cv2
 from face_swap import swap_image, FaceSwapConfig
 
-# 1. Setup the configuration
+# Best open quality stack (HyperSwap + GFPGAN + XSeg + lighting)
 config = FaceSwapConfig(
-    quality="high",      # Uses best model + GFPGAN enhancement
-    device="cuda",       # Use "cpu" or "mps" (for Mac) if needed
-    color_correction=True
+    quality="seamless",
+    device="auto",          # CUDA → DirectML → CPU
+    # pixel_boost=1024,     # default for seamless (tiled GFPGAN)
+    # enhance_method="codeformer",  # optional crisper restore
 )
 
-# 2. Load images Make sure the source has a clear face
 source = cv2.imread("source_face.jpg")
 target = cv2.imread("target_image.jpg")
 
-# 3. Swap and Save!
 result = swap_image(source, target, config)
 cv2.imwrite("output.jpg", result)
 ```
@@ -145,10 +156,20 @@ python -m demos.gui
 Easily process media in bulk directly from your terminal.
 
 ```bash
-# Swap an image
-python -m demos.cli -s source.jpg -t target.jpg -o output.jpg
+# Swap an image (auto device)
+python -m demos.cli -s source.jpg -t target.jpg -o output.jpg -q seamless --device auto
 
-# Swap a video (automatically preserves and syncs audio)
+# CodeFormer / GPEN restore instead of GFPGAN
+python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance gpen
+python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance codeformer
+
+# Prefetch model weights (with progress)
+python -m demos.cli models download --preset seamless
+
+# Score identity + sharpness
+python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
+
+# Swap a video (preserves audio when ffmpeg is available)
 python -m demos.cli -s source.jpg -t input.mp4 -o output.mp4
 
 # Launch live webcam mode

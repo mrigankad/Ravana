@@ -193,13 +193,25 @@ class FaceAligner:
         """
         points = landmarks.points
 
-        if landmarks.num_points >= 68:
+        if landmarks.num_points == 5:
+            # InsightFace kps: left eye, right eye, nose, left mouth, right mouth
+            return np.asarray(points, dtype=np.float32)
+
+        if landmarks.num_points >= 68 and landmarks.num_points != 106:
             # Standard 68-point landmarks
             left_eye = points[36:42].mean(axis=0)
             right_eye = points[42:48].mean(axis=0)
             nose_tip = points[33]
             left_mouth = points[48]
             right_mouth = points[54]
+
+        elif landmarks.num_points == 106:
+            # InsightFace 2D-106: approximate 5 reference points
+            left_eye = points[33:43].mean(axis=0) if len(points) > 42 else points[38]
+            right_eye = points[87:97].mean(axis=0) if len(points) > 96 else points[88]
+            nose_tip = points[86] if len(points) > 86 else points[len(points) // 2]
+            left_mouth = points[52] if len(points) > 52 else points[0]
+            right_mouth = points[61] if len(points) > 61 else points[-1]
 
         elif landmarks.num_points == 468:
             # MediaPipe Face Mesh

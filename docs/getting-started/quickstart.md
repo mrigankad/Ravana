@@ -12,8 +12,9 @@ from face_swap import swap_image, FaceSwapConfig
 
 # Configure the swap
 config = FaceSwapConfig(
-    quality="high",    # "low" (fastest), "medium" (balanced), "high" (best)
-    device="cuda",     # "cuda", "cpu", or "mps" (macOS)
+    quality="seamless",  # low | fast_cpu | medium | high | seamless
+    device="auto",       # auto | cuda | dml | cpu
+    # enhance_method="codeformer",  # optional; seamless defaults to gfpgan
 )
 
 # Load your images
@@ -27,22 +28,23 @@ output = swap_image(source, target, config)
 cv2.imwrite("swapped.jpg", output)
 ```
 
+`quality="seamless"` enables HyperSwap-256, GFPGAN restore, XSeg occlusion, and lighting match. Models download to `models/` on first run (or run `python -m demos.cli models download --preset seamless`).
+
 ## 2. Video Processing
 
-Processing a video file offline. The SDK will automatically handle progress tracking and audio re-muxing.
+Processing a video file offline. The SDK will automatically handle progress tracking and audio re-muxing when ffmpeg is available.
 
 ```python
 from face_swap.api import swap_video
 from face_swap import FaceSwapConfig
 
-config = FaceSwapConfig(quality="medium", device="cuda")
+config = FaceSwapConfig(quality="medium", device="auto")
 
-# Swap faces and preserve audio
 swap_video(
-    source_img_path="source_face.jpg",
-    target_video_path="input_video.mp4",
-    output_video_path="swapped_video.mp4",
-    config=config
+    "source_face.jpg",
+    "input_video.mp4",
+    "swapped_video.mp4",
+    config=config,
 )
 ```
 
@@ -55,52 +57,41 @@ from face_swap.api import start_realtime_swap
 from face_swap import FaceSwapConfig
 
 config = FaceSwapConfig(
-    quality="low",  # Lower quality ensures higher FPS
-    device="cuda",  # CUDA is recommended for real-time
+    quality="fast_cpu",  # or low — prioritize FPS
+    device="auto",
 )
 
 start_realtime_swap(
     source_img="source_face.jpg",
     camera_id=0,
-    config=config
+    config=config,
 )
 ```
 
 ## 4. Advanced: Using the Pipeline Directly
 
-For custom logic, you can use the lower-level pipeline directly. Validating the quality of a swap before displaying it is a good practice.
+For custom logic, use the lower-level pipeline and optional quality validation:
 
 ```python
 import cv2
 from face_swap.pipeline import FaceSwapPipeline, PipelineConfig
 from face_swap.core.quality import QualityValidator
 
-# Initialize pipeline
-cfg = PipelineConfig(device="cuda", crop_size=256)
+cfg = PipelineConfig(device="auto", swap_model="hyperswap", enable_enhance=True)
 pipeline = FaceSwapPipeline(cfg)
 pipeline.initialize()
 
-# Extract Identity
-source_img = cv2.imread("source.jpg")
-embedding = pipeline.extract_source_embedding(source_img)
+source = cv2.imread("source_face.jpg")
+target = cv2.imread("target_image.jpg")
+pipeline.extract_source_embedding(source)
+output = pipeline.process_frame(target)
 
-# Process a frame
-target_img = cv2.imread("target.jpg")
-result = pipeline.process_video_frame(target_img, embedding)
-
-# Validate quality
 validator = QualityValidator()
-report = validator.check_post_swap(result, target_img)
-
-if report.passed:
-    cv2.imshow("Result", result)
-else:
-    print(f"Swap rejected: {report.message}")
-
-pipeline.cleanup()
+report = validator.validate(source, target, output)
+print(report)
 ```
 
 ## Next Steps
+
+- See [Installation](installation.md) for GPU / DirectML setup.
 - Dive into the [Configuration Docs](configuration.md) to tweak performance and quality.
-- Check out the [AR Filters](../advanced/ar-filters.md) to add visual effects.
-- See how to use [Plugins](../advanced/plugins.md) to replace internal components.

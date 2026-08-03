@@ -8,8 +8,14 @@ try:
 except ImportError:
     InSwapperModel = None
 
+try:
+    from .hyperswap import HyperSwapModel
+except ImportError:
+    HyperSwapModel = None
+
 __all__ = [
     "FaceSwapper",
     "SimSwapModel",
     "InSwapperModel",
+    "HyperSwapModel",
 ]
