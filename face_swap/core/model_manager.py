@@ -95,8 +95,8 @@ class ModelRegistry:
 MODEL_PRESETS: Dict[str, List[str]] = {
     "core": ["inswapper"],
     "seamless": ["hyperswap", "gfpgan", "xseg"],
-    "enhance": ["gfpgan", "gpen", "codeformer"],
-    "all": ["inswapper", "hyperswap", "gfpgan", "gpen", "codeformer", "xseg"],
+    "enhance": ["gfpgan", "gpen", "codeformer", "restoreformer"],
+    "all": ["inswapper", "hyperswap", "gfpgan", "gpen", "codeformer", "restoreformer", "xseg"],
 }
 
 
@@ -325,6 +325,21 @@ class ModelManager:
             sha256="d5f066b9068a8b74217f9712e28e875a6144629b108a6f7355acbdb3a2832c54",
             min_bytes=50_000_000,
             license="non-commercial (GPEN / FaceFusion)",
+        ),
+        ModelInfo(
+            name="restoreformer",
+            version="plus_plus",
+            path="restoreformer_plus_plus.onnx",
+            format="onnx",
+            resolution=512,
+            description="RestoreFormer++ face restore (ONNX)",
+            download_urls=[
+                "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/restoreformer_plus_plus.onnx",
+                "https://huggingface.co/facefusion/models-3.0.0/resolve/main/restoreformer_plus_plus.onnx",
+            ],
+            sha256="f4db5a89902b6a2d452446f5721245a6f7185f699b6aec7b77285adb4d504337",
+            min_bytes=50_000_000,
+            license="FaceFusion / RestoreFormer community",
         ),
         ModelInfo(
             name="codeformer",

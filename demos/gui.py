@@ -86,7 +86,7 @@ class FaceSwapGUI:
         title_label.pack(side=tk.LEFT, padx=20, pady=10)
 
         version_label = tk.Label(
-            header, text="v0.3.0",
+            header, text="v0.3.1",
             font=("Segoe UI", 10),
             bg=self.ACCENT, fg="#aaaacc",
         )
@@ -258,6 +258,7 @@ class FaceSwapGUI:
             ("default", "Preset"),
             ("gfpgan", "GFPGAN"),
             ("gpen", "GPEN"),
+            ("restoreformer", "RF++"),
             ("codeformer", "CodeFormer"),
             ("opencv", "OpenCV"),
         ]:
@@ -346,8 +347,18 @@ class FaceSwapGUI:
         )
         self.swap_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
+        self.score_btn = tk.Button(
+            btn_frame, text="Score",
+            command=self._score_result,
+            bg="#3d3d5c", fg="white",
+            font=("Segoe UI", 11),
+            relief=tk.FLAT, cursor="hand2",
+            height=2,
+        )
+        self.score_btn.pack(side=tk.LEFT, padx=(0, 5))
+
         self.webcam_btn = tk.Button(
-            btn_frame, text="📹  Webcam",
+            btn_frame, text="Webcam",
             command=self._start_webcam,
             bg=self.ACCENT, fg="white",
             font=("Segoe UI", 11),
@@ -500,6 +511,53 @@ class FaceSwapGUI:
         self._set_status("Error")
         self.progress.configure(value=0)
         messagebox.showerror("Error", f"Face swap failed:\n{error}")
+
+    def _score_result(self):
+        """Run ArcFace ID + sharpness metrics on the last output (or target path)."""
+        if not self._source_path or not self._target_path:
+            messagebox.showwarning(
+                "Missing Input", "Select source and target images first."
+            )
+            return
+        result = self._output_path if self._output_path and Path(self._output_path).is_file() else None
+        if result is None:
+            messagebox.showwarning(
+                "No Result", "Run a face swap first so there is an output to score."
+            )
+            return
+
+        self._set_status("Scoring...")
+
+        def _job():
+            try:
+                from face_swap import evaluate_swap
+
+                m = evaluate_swap(
+                    self._source_path,
+                    self._target_path,
+                    result,
+                    device=self._device.get(),
+                )
+                msg = (
+                    f"id={m.id_similarity:.3f}  vs_tgt={m.id_vs_target:.3f}\n"
+                    f"sharp={m.sharpness_result:.1f} (d{m.sharpness_gain:+.1f})\n"
+                    f"dE={m.color_delta_lab:.1f}  "
+                    f"{'PASS' if m.passed_id else 'WEAK'} id"
+                )
+                self.root.after(0, lambda: self._on_score_done(msg))
+            except Exception as e:
+                self.root.after(0, lambda: self._on_score_error(str(e)))
+
+        threading.Thread(target=_job, daemon=True).start()
+
+    def _on_score_done(self, msg: str):
+        self._set_status("Score complete")
+        self.preview_label.configure(text=msg)
+        messagebox.showinfo("Swap Score", msg)
+
+    def _on_score_error(self, error: str):
+        self._set_status("Score failed")
+        messagebox.showerror("Score Error", error)
 
     def _start_webcam(self):
         if not self._source_path:

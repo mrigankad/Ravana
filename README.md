@@ -1,273 +1,162 @@
-<div align="center">
-  <img src="docs/assets/mascot.png" width="300" alt="Ravana Mascot">
-  <h1>Ravana v0.3.0</h1>
-  <p><b>A production-ready, high-performance SDK for real-time face swapping on images, video, and live webcam streams.</b></p>
+# Ravana
 
-  [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
-  [![CUDA](https://img.shields.io/badge/CUDA-11.8+-green.svg)](https://developer.nvidia.com/cuda-toolkit)
-  [![TensorRT](https://img.shields.io/badge/TensorRT-Optimized-red.svg)](https://developer.nvidia.com/tensorrt)
-  [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-</div>
+**Python face-swap SDK** for images, video, and webcam — ONNX Runtime on CUDA, AMD DirectML, or CPU.
 
----
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.3.1-informational.svg)](CHANGELOG.md)
 
-## ✨ Features
-
-Ravana provides a modular, easily extensible pipeline capable of running on edge devices or highly-optimized cloud infrastructure.
-
-- **📷 Universal Input**: Seamlessly swap faces in static images, pre-recorded videos, and live webcam streams.
-- **⚡ Real-Time Performance**: Fast CPU path + ONNX Runtime (CUDA / AMD DirectML / CPU); TensorRT hooks available.
-- **🎭 Quality Stack**: `quality="seamless"` — HyperSwap-256, GFPGAN or CodeFormer restore, XSeg occlusion, lighting match.
-- **⏱️ Temporal Consistency**: Optical flow and latent smoothing for flicker-free video.
-- **🛡️ Quality & Security**: Invisible DCT watermarking for provenance and optional quality gates.
-- **🔌 Highly Extensible**: Hot-swappable plugin system for custom detectors, blenders, or tracking models.
-- **💻 Desktop GUI & CLI**: Tkinter GUI and CLI with quality / device / enhance controls.
-- **📱 Cross-Platform**: Windows/Linux (CUDA or DirectML), macOS; TFLite/CoreML export helpers for mobile.
-
----
-
-## 🏗️ Architecture
-
-The SDK utilizes a highly modular pipeline design allowing developers to drop in new components at any stage.
-
-```mermaid
-graph TD
-    subgraph Inputs
-        I_IMG(Image) 
-        I_VID(Video)
-        I_CAM(Webcam)
-    end
-
-    subgraph "Face Swap Pipeline"
-        DET[Face Detection<br/><i>RetinaFace</i>]
-        LMK[Landmarks<br/><i>MediaPipe Mesh</i>]
-        ALN[Alignment<br/><i>Affine Transform</i>]
-        EMB[Identity Embedding<br/><i>ArcFace 512-d</i>]
-        SWP[Face Generation<br/><i>HyperSwap / InSwapper</i>]
-        ENH[Enhancement<br/><i>GFPGAN / CodeFormer</i>]
-        BLD[Blending<br/><i>XSeg + lighting</i>]
-    end
-
-    subgraph "Post-Processing & Output"
-        TMP[Temporal Smoothing<br/><i>Optical Flow</i>]
-        WMK[Invisible Watermark<br/><i>DCT</i>]
-        FLT[AR Overlays<br/><i>Stickers/Frames</i>]
-        OUT_IMG(Output Image)
-        OUT_VID(Output Video)
-    end
-
-    I_IMG --> DET
-    I_VID --> DET
-    I_CAM --> DET
-
-    DET --> LMK --> ALN --> EMB --> SWP --> ENH --> BLD
-    
-    BLD -.-> TMP
-    TMP -.-> WMK
-    BLD --> WMK
-    WMK --> FLT
-    
-    FLT --> OUT_IMG
-    FLT --> OUT_VID
-    
-    classDef default fill:#16213e,stroke:#e94560,stroke-width:2px,color:#fff;
-    classDef input fill:#0f3460,stroke:#aaaacc,stroke-width:1px,color:#fff;
-    class I_IMG,I_VID,I_CAM,OUT_IMG,OUT_VID input;
+```bash
+pip install -e ".[directml]"   # AMD Windows
+# or: pip install -e ".[gpu]"  # NVIDIA
+# or: pip install -e .         # CPU
 ```
 
 ---
 
-## 🛠️ Installation
+## Features (0.3.1)
 
-Ravana requires Python 3.9+ and OpenCV / ONNX Runtime. A GPU is recommended (NVIDIA CUDA or AMD DirectML on Windows).
+| Area | What’s included |
+|------|-----------------|
+| **Quality** | `seamless` preset: HyperSwap-256, GFPGAN (default), XSeg occlusion, lighting/grain match, tiled pixel-boost 1024 |
+| **Restores** | GFPGAN · GPEN · CodeFormer · RestoreFormer++ · OpenCV (`--enhance`) |
+| **Realtime** | `realtime=True`: detect-every-N, ROI track, skip heavy restore, webcam FPS HUD |
+| **Faces** | Select `all` / `largest` / `first` / `index` / `pose` |
+| **Metrics** | ArcFace ID + sharpness (`evaluate` / `evaluate-batch` / GUI Score) |
+| **Models** | Progress download CLI + presets (`core`, `seamless`, `enhance`, `all`) |
+| **Device** | `device="auto"` → CUDA → DirectML → CPU |
 
-### Option A: Standard PyPI Install
+---
+
+## Install
+
 ```bash
 git clone https://github.com/mrigankad/Ravana.git
 cd Ravana
-
-# Install core SDK (CPU onnxruntime)
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
 pip install -e .
-
-# NVIDIA GPU
-pip install -e ".[gpu]"
-
-# AMD Windows (DirectML) — replaces onnxruntime with onnxruntime-directml
-pip install -e ".[directml]"
-
-# Optional: training / TensorRT / docs
-pip install -e ".[all]"
+# GPU extras:
+pip install -e ".[gpu]"       # NVIDIA
+pip install -e ".[directml]"  # AMD Windows
 ```
 
-Face restore models (GFPGAN / CodeFormer / HyperSwap / XSeg) **auto-download** as ONNX on first use — no `basicsr` required on Python 3.13. Prefetch them with:
+**First run** — prefetch weights (or they download on first swap):
 
 ```bash
-python -m demos.cli models list
-python -m demos.cli models download --preset seamless
+python scripts/first_run_check.py --download
+# same as: python -m demos.cli models download --preset seamless
 ```
-### Option B: Docker (Recommended for Linux/Servers)
-Includes a multi-stage Dockerfile that compiles the native C++ library and installs all PyTorch/CUDA dependencies.
 
-```bash
-# Build the Docker image
-docker compose build
-
-# Run the container (Requires NVIDIA Container Toolkit)
-docker compose run face-swap --mode image --source data/src.jpg --target data/tgt.jpg --output data/out.jpg
-```
+ONNX restores work on Python 3.13 without `basicsr`. Optional `.[enhancement]` PyTorch wheels are not required.
 
 ---
 
-## 🚀 Quick Start
+## Quick start
 
-### Python API
-
-The High-Level API makes it incredibly simple to run a swap in just a few lines of code.
+### Python
 
 ```python
 import cv2
-from face_swap import swap_image, FaceSwapConfig
+from face_swap import FaceSwapConfig, swap_image
 
-# Best open quality stack (HyperSwap + GFPGAN + XSeg + lighting)
 config = FaceSwapConfig(
     quality="seamless",
-    device="auto",          # CUDA → DirectML → CPU
-    # pixel_boost=1024,     # default for seamless (tiled GFPGAN)
-    # enhance_method="codeformer",  # optional crisper restore
+    device="auto",
+    # enhance_method="gpen",       # or restoreformer / codeformer / opencv
+    # pixel_boost=1024,            # seamless default
+    # face_select="largest",
 )
 
-source = cv2.imread("source_face.jpg")
-target = cv2.imread("target_image.jpg")
-
-result = swap_image(source, target, config)
-cv2.imwrite("output.jpg", result)
+out = swap_image(
+    cv2.imread("source.jpg"),
+    cv2.imread("target.jpg"),
+    config,
+)
+cv2.imwrite("output.jpg", out)
 ```
 
-### Desktop GUI
+### CLI
 
-Prefer a visual interface? Launch the built-in Desktop App:
+```bash
+# Image
+python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --device auto
+
+# Restore override
+python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance gpen
+
+# Video (audio remuxed when ffmpeg is available)
+python -m demos.cli -s source.jpg -t input.mp4 -o output.mp4 -q medium
+
+# Webcam (realtime path)
+python -m demos.webcam_demo -s source.jpg --device auto --detect-every 3
+# keys: q quit | d detect-N | e enhance | h HUD | r reset
+
+# Models
+python -m demos.cli models list --presets
+python -m demos.cli models download --preset seamless
+
+# Quality metrics
+python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
+python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
+```
+
+### GUI
 
 ```bash
 python -m demos.gui
 ```
 
-### Command Line Interface (CLI)
-
-Easily process media in bulk directly from your terminal.
-
-```bash
-# Swap an image (auto device)
-python -m demos.cli -s source.jpg -t target.jpg -o output.jpg -q seamless --device auto
-
-# CodeFormer / GPEN restore instead of GFPGAN
-python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance gpen
-python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance codeformer
-
-# Prefetch model weights (with progress)
-python -m demos.cli models download --preset seamless
-
-# Score identity + sharpness
-python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
-
-# Swap a video (preserves audio when ffmpeg is available)
-python -m demos.cli -s source.jpg -t input.mp4 -o output.mp4
-
-# Launch live webcam mode
-python -m demos.cli -s source.jpg --webcam --camera 0
-```
+Quality / device / restore / pixel-boost / face select, plus **Score** on the last output.
 
 ---
 
-## 🧠 Advanced Usage
-
-The SDK ships with extensive advanced modules for production environments. Detailed examples can be found in the `examples/` directory.
-
-### Custom Model Training
-Train your own specialized Face Swap models (SimSwap architecture) on custom datasets with mixed-precision and TensorBoard support:
-
-```bash
-python -m face_swap.training.train_cli \
-    --dataset ./data/faces \
-    --output ./training_output \
-    --epochs 100 \
-    --batch-size 8 \
-    --resolution 256
-```
-
-### Plugin System
-Override core pipeline behaviors naturally via the `@register_plugin` decorator or Python entry-points:
-
-```python
-from face_swap.plugins import register_plugin
-from face_swap.detection.base import FaceDetector
-
-@register_plugin(name="my_yolo_detector", category="detector", priority=100)
-class MyYoloDetector(FaceDetector):
-    def detect(self, frame):
-        # Implementation here
-        pass
-```
-
-### Advanced Temporal Processing (Video)
-Achieve state-of-the-art temporally consistent video Face Swaps utilizing Dense Optical Flow. 
+## Pipeline
 
 ```mermaid
-sequenceDiagram
-    participant F1 as Frame N-1
-    participant F2 as Frame N
-    participant OF as Optical Flow (RAFT)
-    participant BL as Flow-Guided Blender
-    participant OUT as Stabilized Output
-
-    F1->>OF: Previous Grayscale
-    F2->>OF: Current Grayscale
-    OF-->>OF: Compute Dense Motion Field
-    OF->>BL: Flow Magnitude Map
-    F1->>BL: Warped Previous Swap
-    F2->>BL: Current Raw Swap
-    BL-->>OUT: Adaptive Alpha Blend (Reduces Ghosting)
+flowchart LR
+  IN[Image / Video / Webcam] --> DET[Detect buffalo_l]
+  DET --> SEL[Face select]
+  SEL --> SWP[HyperSwap / InSwapper]
+  SWP --> MASK[XSeg + lighting]
+  MASK --> ENH[Restore + pixel boost]
+  ENH --> TMP[Temporal EMA / flow]
+  TMP --> OUT[Output]
 ```
 
----
-
-## 📊 Benchmarks & Performance
-
-Generated using the built-in benchmarking suite (`python -m benchmarks.benchmark`):
-
-| Scenario | Resolution | Faces | Target (ms) | Actual (RTX 4090) | Status |
-|----------|------------|-------|-------------|-------------------|--------|
-| **Single Face Swap** | 720p | 1 | ≤ 40.0 ms | **18.4 ms** (~54 FPS) | ✅ PASS |
-| **Multi Face Swap** | 720p | 3 | ≤ 60.0 ms | **35.2 ms** (~28 FPS) | ✅ PASS |
-| **Single High-Res** | 1080p| 1 | ≤ 100.0 ms| **42.1 ms** (~23 FPS) | ✅ PASS |
+| Preset | Behavior |
+|--------|----------|
+| `seamless` | HyperSwap + GFPGAN + XSeg + lighting + boost 1024 + video temporal |
+| `high` / `medium` | InSwapper + lighter restore |
+| `fast_cpu` / `low` | Speed path, enhance off |
+| `realtime=True` | Any quality + detect-every-N + ROI + skip heavy restore (webcam) |
 
 ---
 
-## 📚 Documentation
-
-The extensive SDK documentation is powered by MkDocs. To view it locally:
+## Docs & tests
 
 ```bash
+# Unit tests
+python -m pytest tests/ -q
+
+# MkDocs (optional)
 pip install mkdocs-material mkdocstrings[python]
 mkdocs serve
 ```
 
-*Head over to `http://localhost:8000` to browse the full API Reference, Configuration guides, and Platform Deployment manuals.*
+- Getting started: [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
-## ⚖️ Ethical Guidelines & Usage
+## Ethical use
 
-⚠️ **Important Notice**
+For entertainment, VFX, privacy, and creative work **with consent**. Do not use for non-consensual deepfakes, impersonation, or fraud. You are responsible for complying with local law. Optional invisible DCT watermarking is available for provenance.
 
-This software is intended for legitimate uses such as entertainment, VFX, privacy protection, and creative art. **Do not use this software for:**
-- Creating non-consensual deepfakes
-- Impersonation or fraud
-- Defamation or harassment
-
-Users are responsible for complying with all applicable local laws and obtaining proper consent from individuals whose faces are utilized in source or target media. Ravana outputs a highly robust invisible DCT watermark into every swapped frame ensuring the media is always identifiable as synthetically generated.
+Third-party model licenses (InsightFace, FaceFusion HyperSwap ResearchRAIL, GFPGAN/GPEN/etc.) apply to downloaded weights — review those before commercial use.
 
 ---
 
-## 📜 License
+## License
 
-This SDK is available under the **MIT License**. See the `LICENSE` file for more details.
+MIT — see [LICENSE](LICENSE).

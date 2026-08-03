@@ -45,9 +45,69 @@ class FastVideoConfig:
     skip_color_match: bool = False
     # Process at most this many faces per frame
     max_faces: int = 1
+    # Between full detects, re-run detector only in a padded ROI
+    roi_track: bool = True
+    roi_pad_frac: float = 0.65
     # ONNX Runtime intra-op threads (0 = library default)
     ort_intra_threads: int = 4
     ort_inter_threads: int = 1
+
+
+def union_face_roi(
+    faces: List[Any],
+    frame_shape: Tuple[int, ...],
+    pad_frac: float = 0.65,
+) -> Optional[Tuple[int, int, int, int]]:
+    """
+    Axis-aligned ROI covering all face bboxes with padding.
+
+    Returns ``(x1, y1, x2, y2)`` clipped to the frame, or ``None``.
+    """
+    if not faces:
+        return None
+    h, w = frame_shape[:2]
+    xs1, ys1, xs2, ys2 = [], [], [], []
+    for face in faces:
+        box = getattr(face, "bbox", None)
+        if box is None:
+            continue
+        x1, y1, x2, y2 = [float(v) for v in box[:4]]
+        xs1.append(x1)
+        ys1.append(y1)
+        xs2.append(x2)
+        ys2.append(y2)
+    if not xs1:
+        return None
+    x1, y1, x2, y2 = min(xs1), min(ys1), max(xs2), max(ys2)
+    bw, bh = max(1.0, x2 - x1), max(1.0, y2 - y1)
+    pad_x = bw * float(pad_frac)
+    pad_y = bh * float(pad_frac)
+    rx1 = int(max(0, np.floor(x1 - pad_x)))
+    ry1 = int(max(0, np.floor(y1 - pad_y)))
+    rx2 = int(min(w, np.ceil(x2 + pad_x)))
+    ry2 = int(min(h, np.ceil(y2 + pad_y)))
+    if rx2 - rx1 < 16 or ry2 - ry1 < 16:
+        return None
+    return rx1, ry1, rx2, ry2
+
+
+def offset_faces(faces: List[Any], ox: float, oy: float) -> List[Any]:
+    """Translate face bbox/kps from ROI coordinates into full-frame space."""
+    if abs(ox) < 1e-6 and abs(oy) < 1e-6:
+        return faces
+    out = []
+    for face in faces:
+        face.bbox = face.bbox.astype(np.float32).copy()
+        face.bbox[0] += ox
+        face.bbox[1] += oy
+        face.bbox[2] += ox
+        face.bbox[3] += oy
+        if getattr(face, "kps", None) is not None:
+            face.kps = face.kps.astype(np.float32).copy()
+            face.kps[:, 0] += ox
+            face.kps[:, 1] += oy
+        out.append(face)
+    return out
 
 
 def scale_faces_from_detect_space(

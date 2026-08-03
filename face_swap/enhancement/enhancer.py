@@ -49,6 +49,14 @@ GPEN_ONNX_URLS = (
 GPEN_ONNX_DEFAULT = os.path.join("models", "gpen_bfr_512.onnx")
 GPEN_ONNX_SHA256 = "d5f066b9068a8b74217f9712e28e875a6144629b108a6f7355acbdb3a2832c54"
 
+# FaceFusion RestoreFormer++ ONNX (~294 MB)
+RESTOREFORMER_ONNX_URLS = (
+    "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/restoreformer_plus_plus.onnx",
+    "https://huggingface.co/facefusion/models-3.0.0/resolve/main/restoreformer_plus_plus.onnx",
+)
+RESTOREFORMER_ONNX_DEFAULT = os.path.join("models", "restoreformer_plus_plus.onnx")
+RESTOREFORMER_ONNX_SHA256 = "f4db5a89902b6a2d452446f5721245a6f7185f699b6aec7b77285adb4d504337"
+
 
 @dataclass
 class EnhancementConfig:
@@ -56,7 +64,8 @@ class EnhancementConfig:
 
     Attributes:
         enabled:         Whether enhancement is active.
-        method:          Enhancement method: ``gfpgan``, ``gpen``, ``codeformer``, ``realesrgan``, ``opencv``.
+        method:          Enhancement method: ``gfpgan``, ``gpen``, ``restoreformer``,
+                         ``codeformer``, ``realesrgan``, ``opencv``.
         upscale:         Upscale factor (1 = no upscale, 2 = 2×, 4 = 4×).
         quality:         Quality weight for CodeFormer (0 = quality, 1 = fidelity).
         bg_upsampler:    Whether to also upscale the background.
@@ -458,6 +467,74 @@ class GPENOnnxEnhancer(FaceEnhancer):
         return bgr
 
 
+class RestoreFormerOnnxEnhancer(FaceEnhancer):
+    """
+    RestoreFormer++ via ONNX Runtime (FaceFusion ``restoreformer_plus_plus.onnx``).
+
+    Same [-1, 1] RGB NCHW convention as GFPGAN / GPEN. Works on CPU / CUDA / DirectML.
+    """
+
+    FACE_SIZE = 512
+
+    def __init__(self, config: Optional[EnhancementConfig] = None):
+        self.config = config or EnhancementConfig(method="restoreformer")
+        self._session = None
+        self._input_name = None
+
+    def load_model(self) -> None:
+        import onnxruntime as ort
+
+        from face_swap.core.providers import resolve_ort_providers
+
+        path = self.config.model_path or RESTOREFORMER_ONNX_DEFAULT
+        path = self._ensure_model(path)
+        providers = resolve_ort_providers(self.config.device)
+        opts = ort.SessionOptions()
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._input_name = self._session.get_inputs()[0].name
+        logger.info(
+            "RestoreFormer ONNX loaded (%s) providers=%s",
+            path,
+            self._session.get_providers(),
+        )
+
+    def _ensure_model(self, path: str) -> str:
+        return ensure_downloaded(
+            path,
+            urls=RESTOREFORMER_ONNX_URLS,
+            min_bytes=50_000_000,
+            sha256=RESTOREFORMER_ONNX_SHA256,
+            label="RestoreFormer++ ONNX (~294 MB)",
+        )
+
+    def enhance(self, face: np.ndarray, upscale: int = 1) -> np.ndarray:
+        if self._session is None:
+            self.load_model()
+        if face is None or face.size == 0:
+            return face
+
+        h0, w0 = face.shape[:2]
+        resized = cv2.resize(
+            face, (self.FACE_SIZE, self.FACE_SIZE), interpolation=cv2.INTER_LANCZOS4
+        )
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        blob = (rgb * 2.0 - 1.0).transpose(2, 0, 1)[np.newaxis, ...]
+
+        out = self._session.run(None, {self._input_name: blob})[0]
+        img = np.asarray(out)
+        if img.ndim == 4:
+            img = img[0]
+        if img.shape[0] == 3:
+            img = img.transpose(1, 2, 0)
+        img = np.clip((img + 1.0) * 0.5, 0.0, 1.0)
+        bgr = cv2.cvtColor((img * 255.0).round().astype(np.uint8), cv2.COLOR_RGB2BGR)
+
+        if (h0, w0) != (self.FACE_SIZE, self.FACE_SIZE):
+            bgr = cv2.resize(bgr, (w0, h0), interpolation=cv2.INTER_AREA)
+        return bgr
+
+
 class OpenCVEnhancer(FaceEnhancer):
     """
     Dependency-free face sharpening / detail restore.
@@ -668,8 +745,8 @@ def create_enhancer(config: EnhancementConfig) -> FaceEnhancer:
     """
     Factory: create an enhancer based on configuration.
 
-    For ``gfpgan`` / ``gpen`` / ``codeformer``, prefers the ONNX Runtime path
-    (no basicsr), then OpenCV on failure.
+    For ``gfpgan`` / ``gpen`` / ``restoreformer`` / ``codeformer``, prefers the
+    ONNX Runtime path (no basicsr), then OpenCV on failure.
     """
     method = config.method.lower()
     try:
@@ -680,6 +757,8 @@ def create_enhancer(config: EnhancementConfig) -> FaceEnhancer:
             return GFPGANEnhancer(config)
         if method in ("gpen", "gpen_bfr", "gpen_bfr_512"):
             return GPENOnnxEnhancer(config)
+        if method in ("restoreformer", "restoreformer_plus_plus", "restoreformer++"):
+            return RestoreFormerOnnxEnhancer(config)
         if method == "realesrgan":
             return RealESRGANEnhancer(config)
         if method == "codeformer":

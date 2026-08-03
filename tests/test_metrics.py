@@ -2,14 +2,16 @@
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import cv2
+import numpy as np
 
 from face_swap.core.metrics import (
     SwapMetrics,
+    VariantResult,
+    expand_variant_grid,
     laplacian_sharpness,
     mean_lab_delta,
-    evaluate_swap,
+    summarize_variant_rows,
 )
 
 
@@ -79,14 +81,17 @@ class TestEvaluateMocked:
 
         from face_swap.core.metrics import MetricsAnalyzer
 
-        with patch.object(MetricsAnalyzer, "_ensure_app", lambda self: None), patch.object(
-            MetricsAnalyzer,
-            "detect",
-            side_effect=[
-                [fake_face(emb_src)],
-                [fake_face(emb_tgt)],
-                [fake_face(emb_res)],
-            ],
+        with (
+            patch.object(MetricsAnalyzer, "_ensure_app", lambda self: None),
+            patch.object(
+                MetricsAnalyzer,
+                "detect",
+                side_effect=[
+                    [fake_face(emb_src)],
+                    [fake_face(emb_tgt)],
+                    [fake_face(emb_res)],
+                ],
+            ),
         ):
             metrics = MetricsAnalyzer(device="cpu").evaluate(src, tgt, res)
 
@@ -94,3 +99,40 @@ class TestEvaluateMocked:
         assert metrics.passed_id
         assert metrics.faces_source == 1
         assert metrics.faces_result == 1
+
+
+class TestVariantGrid:
+    def test_expand_variant_grid(self):
+        specs = expand_variant_grid(["gfpgan", "gpen"], [512, 1024])
+        assert [s.name for s in specs] == [
+            "gfpgan_512",
+            "gfpgan_1024",
+            "gpen_512",
+            "gpen_1024",
+        ]
+
+    def test_summarize_ranks_by_id(self):
+        rows = [
+            VariantResult(
+                "a",
+                "p1",
+                SwapMetrics(id_similarity=0.2, sharpness_gain=10, passed_id=False),
+                1.0,
+            ),
+            VariantResult(
+                "b",
+                "p1",
+                SwapMetrics(id_similarity=0.5, sharpness_gain=5, passed_id=True),
+                1.0,
+            ),
+            VariantResult(
+                "b",
+                "p2",
+                SwapMetrics(id_similarity=0.4, sharpness_gain=7, passed_id=True),
+                2.0,
+            ),
+        ]
+        summary = summarize_variant_rows(rows)
+        assert summary[0]["variant"] == "b"
+        assert summary[0]["id_similarity_mean"] == 0.45
+        assert summary[0]["passed_id_rate"] == 1.0

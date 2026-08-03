@@ -50,7 +50,9 @@ class SwapMetrics:
         )
 
 
-def laplacian_sharpness(image_bgr: np.ndarray, bbox: Optional[Sequence[float]] = None) -> float:
+def laplacian_sharpness(
+    image_bgr: np.ndarray, bbox: Optional[Sequence[float]] = None
+) -> float:
     """Laplacian variance; higher = sharper. Optional bbox crop with pad."""
     if image_bgr is None or image_bgr.size == 0:
         return 0.0
@@ -220,3 +222,95 @@ def evaluate_swap(
     return MetricsAnalyzer(device=device).evaluate(
         source, target, result, min_id_sim=min_id_sim
     )
+
+
+@dataclass
+class VariantSpec:
+    """One cell in an A/B metrics matrix."""
+
+    name: str
+    enhance_method: str = "gfpgan"
+    pixel_boost: int = 512
+    quality: str = "seamless"
+
+
+@dataclass
+class VariantResult:
+    variant: str
+    pair: str
+    metrics: SwapMetrics
+    elapsed_s: float = 0.0
+    output_path: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = self.metrics.to_dict()
+        d.update(
+            {
+                "variant": self.variant,
+                "pair": self.pair,
+                "elapsed_s": round(self.elapsed_s, 3),
+                "output_path": self.output_path,
+            }
+        )
+        return d
+
+
+DEFAULT_VARIANTS: List[VariantSpec] = [
+    VariantSpec("gfpgan_512", "gfpgan", 512),
+    VariantSpec("gfpgan_1024", "gfpgan", 1024),
+    VariantSpec("gpen_512", "gpen", 512),
+    VariantSpec("codeformer_512", "codeformer", 512),
+    VariantSpec("opencv_0", "opencv", 0),
+]
+
+
+def expand_variant_grid(
+    enhances: Sequence[str],
+    boosts: Sequence[int],
+    quality: str = "seamless",
+) -> List[VariantSpec]:
+    """Build VariantSpec list from enhance × boost axes."""
+    out: List[VariantSpec] = []
+    for method in enhances:
+        for boost in boosts:
+            name = f"{method}_{boost}"
+            out.append(
+                VariantSpec(
+                    name=name,
+                    enhance_method=method,
+                    pixel_boost=int(boost),
+                    quality=quality,
+                )
+            )
+    return out
+
+
+def summarize_variant_rows(rows: Sequence[VariantResult]) -> List[Dict[str, Any]]:
+    """Average metrics per variant name across pairs."""
+    by: Dict[str, List[VariantResult]] = {}
+    for row in rows:
+        by.setdefault(row.variant, []).append(row)
+    summary = []
+    for name, items in sorted(by.items()):
+        n = len(items)
+        summary.append(
+            {
+                "variant": name,
+                "pairs": n,
+                "id_similarity_mean": round(
+                    sum(i.metrics.id_similarity for i in items) / n, 4
+                ),
+                "sharpness_gain_mean": round(
+                    sum(i.metrics.sharpness_gain for i in items) / n, 2
+                ),
+                "color_delta_lab_mean": round(
+                    sum(i.metrics.color_delta_lab for i in items) / n, 2
+                ),
+                "elapsed_s_mean": round(sum(i.elapsed_s for i in items) / n, 3),
+                "passed_id_rate": round(
+                    sum(1 for i in items if i.metrics.passed_id) / n, 3
+                ),
+            }
+        )
+    summary.sort(key=lambda r: (-r["id_similarity_mean"], -r["sharpness_gain_mean"]))
+    return summary

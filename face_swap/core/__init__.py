@@ -12,7 +12,16 @@ from .adaptive import (
     identity_preserved,
     reinhard_color_match,
 )
-from .metrics import MetricsAnalyzer, SwapMetrics, evaluate_swap, laplacian_sharpness
+from .metrics import (
+    MetricsAnalyzer,
+    SwapMetrics,
+    VariantResult,
+    VariantSpec,
+    evaluate_swap,
+    expand_variant_grid,
+    laplacian_sharpness,
+    summarize_variant_rows,
+)
 from .model_manager import (
     MODEL_PRESETS,
     ModelInfo,
@@ -52,6 +61,10 @@ __all__ = [
     "MetricsAnalyzer",
     "evaluate_swap",
     "laplacian_sharpness",
+    "VariantSpec",
+    "VariantResult",
+    "expand_variant_grid",
+    "summarize_variant_rows",
     # Adaptive
     "AdaptiveConfig",
     "FaceQuality",

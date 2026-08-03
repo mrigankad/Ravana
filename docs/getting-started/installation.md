@@ -8,7 +8,7 @@
   - AMD on Windows → `pip install -e ".[directml]"` (DirectML)
 - **CPU**: Works for images; use `quality="fast_cpu"` for video
 
-ONNX restore/swap models (GFPGAN, CodeFormer, HyperSwap, XSeg) download automatically on first use, or prefetch:
+ONNX restore/swap models (GFPGAN, GPEN, CodeFormer, HyperSwap, XSeg) download automatically on first use, or prefetch:
 
 ```bash
 python -m demos.cli models list --presets
@@ -56,6 +56,12 @@ docker run --gpus all -v $(pwd)/data:/data face-swap \
 ```
 
 ## Verify Installation
+
+```bash
+python scripts/first_run_check.py
+# Prefetch seamless weights:
+python scripts/first_run_check.py --download
+```
 
 ```python
 import face_swap

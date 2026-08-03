@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1 — 2026-08-04
+
+Realtime polish, metrics A/B batch, RestoreFormer++, GUI Score, and first-run hardening.
+
+### Realtime
+- `FaceSwapConfig(realtime=True)` — detect-every-N, skip heavy restore, ROI track between full detects
+- Webcam HUD (FPS / detect N / ROI / enhance) + hotkeys `d` `e` `h` `r`
+- `start_realtime_swap` defaults to realtime path with FPS overlay
+
+### Metrics
+- `evaluate-batch` / `scripts/metrics_batch.py` — enhance × pixel-boost matrix → CSV/JSON
+- Restore ORT models forced to CPU when swapper is on DirectML (stable multi-variant runs)
+- GUI **Score** button — ArcFace ID + sharpness on last output
+
+### Quality
+- **RestoreFormer++** ONNX restore (`--enhance restoreformer`)
+
+### DX
+- `scripts/first_run_check.py` — version, providers, model status, optional `--download`
+- Quickstart docs: first-run, evaluate, realtime webcam
+
 ## 0.3.0 — 2026-08-04
 
 Seamless quality stack and developer UX for the Ravana face-swap SDK.
@@ -24,7 +45,7 @@ Seamless quality stack and developer UX for the Ravana face-swap SDK.
 - GUI wiring for quality, enhance, pixel boost, face select
 
 ### Tests
-- Expanded suite (~161 tests) covering seamless, HyperSwap, XSeg, GPEN, metrics, face select, temporal
+- Expanded suite covering seamless, HyperSwap, XSeg, GPEN, metrics, face select, temporal, realtime
 
 ## 0.2.0
 

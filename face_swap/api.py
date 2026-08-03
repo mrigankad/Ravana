@@ -7,6 +7,7 @@ As per PRD Section 9.1, this provides simple high-level functions:
 - start_realtime_swap(source_img, camera_id, callback, config)
 """
 
+import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Union
 
@@ -42,6 +43,8 @@ class FaceSwapConfig:
     # Explicit CPU realtime mode (overrides quality presets for video)
     fast_cpu: bool = False
     detect_every_n: int = 3
+    # Live webcam / stream: enable detect-every-N + ROI track + skip heavy restore
+    realtime: bool = False
 
     # Optional overrides (None = use quality preset defaults)
     enhance_method: Optional[str] = None
@@ -69,7 +72,13 @@ class FaceSwapConfig:
             config.enable_color_match = not self.fast_cpu and self.quality != "fast_cpu"
             config.fast_video = FastVideoConfig(
                 enabled=True,
-                detect_every_n=self.detect_every_n if self.device == "cpu" or self.fast_cpu or self.quality == "fast_cpu" else 1,
+                detect_every_n=(
+                    self.detect_every_n
+                    if self.device == "cpu"
+                    or self.fast_cpu
+                    or self.quality == "fast_cpu"
+                    else 1
+                ),
                 det_size=(320, 320),
                 detect_max_side=640,
                 skip_enhance=True,
@@ -135,7 +144,29 @@ class FaceSwapConfig:
         config.face_index = int(self.face_index)
         config.max_faces = int(self.max_faces or 0)
 
+        if self.realtime:
+            n = max(1, int(self.detect_every_n))
+            # Live path: prefer speed; keep color match, drop heavy restore
+            config.fast_video = FastVideoConfig(
+                enabled=True,
+                detect_every_n=n,
+                det_size=(320, 320),
+                detect_max_side=640,
+                skip_enhance=True,
+                skip_color_match=False,
+                max_faces=max(1, int(self.max_faces or 1)),
+                roi_track=True,
+                roi_pad_frac=0.65,
+                ort_intra_threads=4,
+            )
+            config.video_detect_every_n = n
+            config.enable_enhance = False
+            config.enhance_target_px = 0
+            config.use_xseg_occlusion = False
+            config.enable_temporal = self.enable_smoothing
+
         return config
+
 
 def swap_image(
     source_img: Union[str, Frame],
@@ -301,22 +332,35 @@ def start_realtime_swap(
         if source_img is None:
             raise ValueError(f"Could not load source image: {source_img}")
 
-    # Use fast config for real-time if not specified
+    # Use realtime path by default for webcam
     cfg = config or FaceSwapConfig(
-        quality="fast_cpu", device="cpu", fast_cpu=True, enable_smoothing=False
+        quality="medium", device="auto", realtime=True, enable_smoothing=True
     )
-
-    # Create pipeline
-    pipeline_config = cfg.to_pipeline_config()
-    if cfg.device == "cpu" or cfg.fast_cpu:
-        pipeline_config.fast_video = pipeline_config.fast_video or FastVideoConfig(
-            enabled=True, detect_every_n=cfg.detect_every_n, skip_enhance=True
+    if not cfg.realtime and (cfg.device == "cpu" or cfg.fast_cpu):
+        # Legacy CPU-only fast path
+        pass
+    elif not cfg.realtime:
+        cfg = FaceSwapConfig(
+            quality=cfg.quality,
+            device=cfg.device,
+            realtime=True,
+            detect_every_n=cfg.detect_every_n,
+            enable_smoothing=cfg.enable_smoothing,
+            enhance_method=cfg.enhance_method,
+            face_select=cfg.face_select,
         )
-        if pipeline_config.fast_video:
-            pipeline_config.fast_video.enabled = True
-            pipeline_config.fast_video.skip_enhance = True
-    else:
-        pipeline_config.enable_temporal = True
+
+    pipeline_config = cfg.to_pipeline_config()
+    if pipeline_config.fast_video is None or not pipeline_config.fast_video.enabled:
+        pipeline_config.fast_video = FastVideoConfig(
+            enabled=True,
+            detect_every_n=max(1, cfg.detect_every_n),
+            skip_enhance=True,
+            roi_track=True,
+            max_faces=1,
+        )
+        pipeline_config.video_detect_every_n = max(1, cfg.detect_every_n)
+        pipeline_config.enable_enhance = False
     pipeline = FaceSwapPipeline(pipeline_config)
 
     # Extract source embedding
@@ -334,6 +378,8 @@ def start_realtime_swap(
     print("Starting real-time face swap. Press 'q' to quit.")
 
     frame_idx = 0
+    fps_hist = []
+    last_t = None
 
     try:
         while True:
@@ -341,17 +387,35 @@ def start_realtime_swap(
             if not ret:
                 break
 
-            # Process frame
+            now = time.time()
+            if last_t is not None:
+                dt = now - last_t
+                if dt > 1e-6:
+                    fps_hist.append(1.0 / dt)
+                    if len(fps_hist) > 30:
+                        fps_hist.pop(0)
+            last_t = now
+
             result = pipeline.process_video_frame(frame, source_embedding, frame_idx)
 
-            # Call callback if provided
+            if fps_hist:
+                avg = sum(fps_hist) / len(fps_hist)
+                cv2.putText(
+                    result,
+                    f"FPS: {avg:.1f}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    (0, 255, 0),
+                    2,
+                    cv2.LINE_AA,
+                )
+
             if callback:
                 callback(result)
 
-            # Display
             cv2.imshow("Face Swap - Press q to quit", result)
 
-            # Check for quit
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 

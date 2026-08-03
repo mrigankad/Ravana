@@ -1,97 +1,109 @@
 # Quick Start Guide
 
-This guide will walk you through the most common Ravana use cases.
+This guide walks through the most common Ravana use cases.
+
+## 0. First run (models + health check)
+
+```bash
+# Prefetch seamless weights (~HyperSwap + GFPGAN + XSeg)
+python -m demos.cli models download --preset seamless
+
+# Or run the health check (optional --download)
+python scripts/first_run_check.py --download
+```
+
+Models also auto-download on first swap if missing.
 
 ## 1. Single Image Swap
-
-The easiest way to swap a face in an image:
 
 ```python
 import cv2
 from face_swap import swap_image, FaceSwapConfig
 
-# Configure the swap
 config = FaceSwapConfig(
     quality="seamless",  # low | fast_cpu | medium | high | seamless
     device="auto",       # auto | cuda | dml | cpu
-    # enhance_method="codeformer",  # optional; seamless defaults to gfpgan
+    # enhance_method="gpen",       # or codeformer / gfpgan / opencv
+    # pixel_boost=1024,            # seamless default
 )
 
-# Load your images
 source = cv2.imread("source_face.jpg")
 target = cv2.imread("target_image.jpg")
-
-# Run the swap
 output = swap_image(source, target, config)
-
-# Save the result
 cv2.imwrite("swapped.jpg", output)
 ```
 
-`quality="seamless"` enables HyperSwap-256, GFPGAN restore, XSeg occlusion, and lighting match. Models download to `models/` on first run (or run `python -m demos.cli models download --preset seamless`).
+`quality="seamless"` enables HyperSwap-256, GFPGAN restore, XSeg occlusion, lighting match, and tiled pixel-boost.
 
-## 2. Video Processing
+```bash
+python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --device auto
+```
 
-Processing a video file offline. The SDK will automatically handle progress tracking and audio re-muxing when ffmpeg is available.
+## 2. Score a swap (identity + sharpness)
+
+```bash
+python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
+python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
+```
 
 ```python
-from face_swap.api import swap_video
-from face_swap import FaceSwapConfig
+from face_swap import evaluate_swap
+
+m = evaluate_swap("source.jpg", "target.jpg", "out.jpg", device="auto")
+print(m.summary_line())
+```
+
+## 3. Video Processing
+
+```python
+from face_swap import FaceSwapConfig, swap_video
 
 config = FaceSwapConfig(quality="medium", device="auto")
-
-swap_video(
-    "source_face.jpg",
-    "input_video.mp4",
-    "swapped_video.mp4",
-    config=config,
-)
+swap_video("source_face.jpg", "input_video.mp4", "swapped_video.mp4", config=config)
 ```
 
-## 3. Live Webcam
+## 4. Live Webcam
 
-For a real-time face swap experience using your webcam:
+Realtime mode skips heavy restore and uses detect-every-N + ROI tracking:
 
 ```python
-from face_swap.api import start_realtime_swap
-from face_swap import FaceSwapConfig
+from face_swap import FaceSwapConfig, start_realtime_swap
 
 config = FaceSwapConfig(
-    quality="fast_cpu",  # or low — prioritize FPS
+    quality="medium",
     device="auto",
+    realtime=True,
+    detect_every_n=3,
 )
 
-start_realtime_swap(
-    source_img="source_face.jpg",
-    camera_id=0,
-    config=config,
-)
+start_realtime_swap("source_face.jpg", camera_id=0, config=config)
 ```
 
-## 4. Advanced: Using the Pipeline Directly
+```bash
+python -m demos.webcam_demo -s source.jpg --device auto --detect-every 3
+# keys: q quit | d cycle detect N | e OpenCV enhance | h HUD
+```
 
-For custom logic, use the lower-level pipeline and optional quality validation:
+## 5. Pipeline + metrics
 
 ```python
 import cv2
-from face_swap.pipeline import FaceSwapPipeline, PipelineConfig
-from face_swap.core.quality import QualityValidator
+from face_swap import FaceSwapConfig, evaluate_swap
+from face_swap.pipeline import FaceSwapPipeline
 
-cfg = PipelineConfig(device="auto", swap_model="hyperswap", enable_enhance=True)
+cfg = FaceSwapConfig(quality="seamless", device="auto").to_pipeline_config()
 pipeline = FaceSwapPipeline(cfg)
-pipeline.initialize()
 
 source = cv2.imread("source_face.jpg")
 target = cv2.imread("target_image.jpg")
-pipeline.extract_source_embedding(source)
-output = pipeline.process_frame(target)
+emb = pipeline.extract_source_embedding(source)
+output = pipeline.process_frame(target, emb)
+cv2.imwrite("swapped.jpg", output)
 
-validator = QualityValidator()
-report = validator.validate(source, target, output)
-print(report)
+print(evaluate_swap(source, target, output).summary_line())
 ```
 
 ## Next Steps
 
-- See [Installation](installation.md) for GPU / DirectML setup.
-- Dive into the [Configuration Docs](configuration.md) to tweak performance and quality.
+- [Installation](installation.md) for GPU / DirectML setup
+- `python -m demos.cli models list --presets` for weight status

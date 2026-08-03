@@ -33,7 +33,6 @@ from .core.adaptive import (
     match_grain_to_target,
     match_lighting_to_target,
     neck_ring_color_reference,
-    reinhard_color_match,
     select_faces,
     upscale_frame_for_tiny_faces,
     upscale_if_small_face,
@@ -41,7 +40,9 @@ from .core.adaptive import (
 from .core.fast_video import (
     FastVideoConfig,
     maybe_downscale_for_detect,
+    offset_faces,
     scale_faces_from_detect_space,
+    union_face_roi,
 )
 from .core.profiler import PipelineProfiler
 from .core.providers import insightface_ctx_id, resolve_ort_providers
@@ -105,7 +106,7 @@ class PipelineConfig:
     min_id_similarity: float = 0.25
     # Post-swap face restore (opencv always available; gfpgan if installed)
     enable_enhance: bool = True
-    enhance_method: str = "opencv"  # opencv | gfpgan | gpen | codeformer | realesrgan
+    enhance_method: str = "opencv"  # opencv | gfpgan | gpen | restoreformer | codeformer | realesrgan
     enhance_blend: float = 1.0  # 0..1 mix of restored vs swapped crop
     enhance_target_px: int = 0  # 0 = no boost; seamless uses 1024 (tiled)
     enhance_fidelity: float = 0.5  # CodeFormer weight: 0=quality, 1=fidelity
@@ -294,9 +295,7 @@ class FaceSwapPipeline:
             try:
                 self._enhancer.load_model()
             except Exception as e:
-                logger.warning(
-                    "Enhancer load failed (%s); falling back to OpenCV.", e
-                )
+                logger.warning("Enhancer load failed (%s); falling back to OpenCV.", e)
                 self._enhancer = create_enhancer(
                     EnhancementConfig(
                         enabled=True,
@@ -322,7 +321,9 @@ class FaceSwapPipeline:
                 )
                 self._xseg.load_model()
             except Exception as e:
-                logger.warning("XSeg occluder load failed (%s); continuing without it.", e)
+                logger.warning(
+                    "XSeg occluder load failed (%s); continuing without it.", e
+                )
                 self._xseg = None
 
         self._initialized = True
@@ -411,7 +412,7 @@ class FaceSwapPipeline:
         )
 
     def _get_faces_video(self, frame: Frame, frame_number: int) -> list:
-        """Detect with optional every-N-frames cache (fast_video or video_detect_every_n)."""
+        """Detect with optional every-N-frames cache + ROI track between full detects."""
         fast = self._fast if (self._fast and self._fast.enabled) else None
         n = 1
         if fast is not None and fast.detect_every_n > 1:
@@ -422,14 +423,67 @@ class FaceSwapPipeline:
         if n <= 1:
             return self._get_faces(frame)
 
-        if (
+        need_full = (
             frame_number - self._cache_frame_idx >= n
             or not self._cached_faces
             or frame_number == 0
-        ):
+        )
+        if need_full:
             self._cached_faces = self._get_faces(frame)
             self._cache_frame_idx = frame_number
+            return list(self._cached_faces)
+
+        # Interim frames: optional ROI re-detect for tracking without full-frame cost
+        if fast is not None and getattr(fast, "roi_track", True) and self._cached_faces:
+            roi_faces = self._detect_faces_in_roi(frame, self._cached_faces, fast)
+            if roi_faces:
+                selected = select_faces(
+                    roi_faces,
+                    mode=getattr(self.config, "face_select", "all"),
+                    index=int(getattr(self.config, "face_index", 0)),
+                    max_faces=int(
+                        getattr(self.config, "max_faces", 0)
+                        or getattr(fast, "max_faces", 0)
+                        or 0
+                    ),
+                    source_face=self._source_face,
+                )
+                if selected:
+                    self._cached_faces = selected
+                    return list(self._cached_faces)
+
         return list(self._cached_faces)
+
+    def _detect_faces_in_roi(
+        self, frame: Frame, prior_faces: list, fast: FastVideoConfig
+    ) -> list:
+        """Run detector on a padded ROI around prior faces; map back to full frame."""
+        roi = union_face_roi(
+            prior_faces,
+            frame.shape,
+            pad_frac=float(getattr(fast, "roi_pad_frac", 0.65)),
+        )
+        if roi is None:
+            return []
+        x1, y1, x2, y2 = roi
+        crop = frame[y1:y2, x1:x2]
+        if crop.size == 0:
+            return []
+        try:
+            app = self._ensure_face_app()
+            faces = app.get(crop) or []
+        except Exception as e:
+            logger.debug("ROI detect failed: %s", e)
+            return []
+        faces = [
+            f
+            for f in faces
+            if float(getattr(f, "det_score", 1.0))
+            >= self.config.det_confidence_threshold
+        ]
+        faces = offset_faces(faces, float(x1), float(y1))
+        faces.sort(key=lambda f: float(f.det_score), reverse=True)
+        return faces[: max(1, int(fast.max_faces))]
 
     def _apply_watermark(self, frame: Frame) -> Frame:
         if self.watermarker is None or not self.watermarker.config.enabled:
@@ -541,7 +595,9 @@ class FaceSwapPipeline:
         swapped_faces = []
         xseg_masks = {}  # id(face) -> soft mask for padded bbox crop
         fast = self._fast if (self._fast and self._fast.enabled) else None
-        do_color = self.config.enable_color_match and self._adaptive_cfg.enable_color_match
+        do_color = (
+            self.config.enable_color_match and self._adaptive_cfg.enable_color_match
+        )
         if fast is not None and fast.skip_color_match:
             do_color = False
 
@@ -754,8 +810,7 @@ class FaceSwapPipeline:
 
         mask3 = mask[:, :, None]
         blended = (
-            mask3 * matched.astype(np.float32)
-            + (1 - mask3) * region.astype(np.float32)
+            mask3 * matched.astype(np.float32) + (1 - mask3) * region.astype(np.float32)
         ).astype(np.uint8)
 
         out = swapped.copy()
@@ -927,7 +982,8 @@ class FaceSwapPipeline:
 
         with self.profiler.stage("swap"):
             swap_results = [
-                self.swapper.swap(aligned, source_embedding) for aligned in aligned_faces
+                self.swapper.swap(aligned, source_embedding)
+                for aligned in aligned_faces
             ]
 
         if self.quality_validator is not None:
@@ -1017,9 +1073,7 @@ class FaceSwapPipeline:
                 if not faces:
                     continue
                 face = select_faces(faces, mode="largest")[0]
-                embeddings.append(
-                    np.asarray(face.normed_embedding, dtype=np.float32)
-                )
+                embeddings.append(np.asarray(face.normed_embedding, dtype=np.float32))
                 score = float(face.det_score)
                 if score > best_score:
                     best_score = score

@@ -14,8 +14,9 @@ from typing import List
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from face_swap import swap_image, swap_video, batch_swap, FaceSwapConfig
 import cv2
+
+from face_swap import FaceSwapConfig, batch_swap, swap_image, swap_video
 
 
 def main():
@@ -24,6 +25,8 @@ def main():
         return models_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "evaluate":
         return evaluate_main(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "evaluate-batch":
+        return evaluate_batch_main(sys.argv[2:])
 
     parser = argparse.ArgumentParser(
         description="Ravana - Real-time face swapping",
@@ -38,6 +41,9 @@ Examples:
 
   # Score identity + sharpness after a swap
   python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
+
+  # A/B batch: restore × pixel-boost on live_test pairs
+  python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
 
   # Score an existing result without re-swapping
   python -m demos.cli evaluate -s source.jpg -t target.jpg -r result.jpg
@@ -59,83 +65,84 @@ Examples:
 
   # Real-time webcam demo
   python -m demos.cli -s source.jpg --webcam --camera 0
-        """
+        """,
     )
-    
+
     # Input/output arguments
     parser.add_argument(
-        "-s", "--source",
-        required=True,
-        help="Source image containing the face to swap"
+        "-s", "--source", required=True, help="Source image containing the face to swap"
     )
     parser.add_argument(
-        "-t", "--target",
-        help="Target image or video to swap face onto"
+        "-t", "--target", help="Target image or video to swap face onto"
     )
-    parser.add_argument(
-        "-o", "--output",
-        help="Output file or directory"
-    )
-    
+    parser.add_argument("-o", "--output", help="Output file or directory")
+
     # Mode arguments
     parser.add_argument(
-        "--batch",
-        help="Batch process files matching pattern (e.g., 'images/*.jpg')"
+        "--batch", help="Batch process files matching pattern (e.g., 'images/*.jpg')"
     )
     parser.add_argument(
-        "--webcam",
-        action="store_true",
-        help="Start real-time webcam demo"
+        "--webcam", action="store_true", help="Start real-time webcam demo"
     )
     parser.add_argument(
-        "--camera",
+        "--camera", type=int, default=0, help="Camera device ID (default: 0)"
+    )
+    parser.add_argument(
+        "--detect-every",
         type=int,
-        default=0,
-        help="Camera device ID (default: 0)"
+        default=3,
+        metavar="N",
+        help="Webcam: full face detect every N frames (default: 3)",
     )
-    
+    parser.add_argument(
+        "--no-realtime",
+        action="store_true",
+        help="Webcam: disable realtime speed path",
+    )
+
     # Quality arguments
     parser.add_argument(
-        "-q", "--quality",
+        "-q",
+        "--quality",
         choices=["low", "fast_cpu", "medium", "high", "seamless"],
         default="medium",
-        help="Quality preset (seamless = HyperSwap+GFPGAN+XSeg; default: medium)"
+        help="Quality preset (seamless = HyperSwap+GFPGAN+XSeg; default: medium)",
     )
     parser.add_argument(
         "--device",
         choices=["cuda", "cpu", "dml", "auto"],
         default="auto",
-        help="Device: cuda, cpu, dml (AMD DirectML), or auto (default)"
+        help="Device: cuda, cpu, dml (AMD DirectML), or auto (default)",
     )
     parser.add_argument(
         "--enhance",
-        choices=["gfpgan", "gpen", "codeformer", "opencv"],
+        choices=["gfpgan", "gpen", "restoreformer", "codeformer", "opencv"],
         default=None,
-        help="Override face restore for seamless/high (gfpgan | gpen | codeformer | opencv)"
+        help="Override face restore for seamless/high (gfpgan | gpen | restoreformer | codeformer | opencv)",
     )
     parser.add_argument(
         "--swapper",
         choices=["inswapper", "hyperswap"],
         default=None,
-        help="Override swap model (seamless defaults to hyperswap)"
+        help="Override swap model (seamless defaults to hyperswap)",
     )
     parser.add_argument(
         "--face",
         choices=["all", "largest", "first", "index", "pose"],
         default="all",
-        help="Which target face(s) to swap (default: all)"
+        help="Which target face(s) to swap (default: all)",
     )
     parser.add_argument(
         "--face-index",
         type=int,
         default=0,
-        help="Face index when --face index (0 = highest conf)"
+        help="Face index when --face index (0 = highest conf)",
     )
     parser.add_argument(
         "--max-faces",
         type=int,
         default=0,
-        help="Cap number of faces swapped (0 = unlimited)"
+        help="Cap number of faces swapped (0 = unlimited)",
     )
     parser.add_argument(
         "--pixel-boost",
@@ -145,24 +152,19 @@ Examples:
         help="Face restore pixel boost side length (0=off; seamless default 1024)",
     )
     parser.add_argument(
-        "--no-color-correction",
-        action="store_true",
-        help="Disable color correction"
+        "--no-color-correction", action="store_true", help="Disable color correction"
     )
     parser.add_argument(
         "--no-smoothing",
         action="store_true",
-        help="Disable temporal smoothing (for video)"
+        help="Disable temporal smoothing (for video)",
     )
-    
+
     # Model arguments
-    parser.add_argument(
-        "--swap-model",
-        help="Path to face swap ONNX model (optional)"
-    )
-    
+    parser.add_argument("--swap-model", help="Path to face swap ONNX model (optional)")
+
     args = parser.parse_args()
-    
+
     # Create config
     config = FaceSwapConfig(
         quality=args.quality,
@@ -176,38 +178,40 @@ Examples:
         face_index=args.face_index,
         max_faces=args.max_faces,
         pixel_boost=args.pixel_boost,
+        realtime=bool(args.webcam) and not args.no_realtime,
+        detect_every_n=max(1, args.detect_every),
     )
-    
+
     try:
         if args.webcam:
             # Real-time webcam mode
             run_webcam(args.source, args.camera, config)
-        
+
         elif args.batch:
             # Batch processing mode
             if not args.output:
                 print("Error: --output required for batch processing")
                 sys.exit(1)
-            
+
             # Expand glob pattern
             target_files = glob.glob(args.batch)
             if not target_files:
                 print(f"No files found matching pattern: {args.batch}")
                 sys.exit(1)
-            
+
             print(f"Batch processing {len(target_files)} files...")
             output_files = batch_swap(args.source, target_files, args.output, config)
             print(f"Completed. Output files saved to: {args.output}")
-        
+
         elif args.target:
             # Single file mode
             if not args.output:
                 print("Error: --output required")
                 sys.exit(1)
-            
+
             target_path = Path(args.target)
-            
-            if target_path.suffix.lower() in ['.mp4', '.mov', '.avi', '.mkv']:
+
+            if target_path.suffix.lower() in [".mp4", ".mov", ".avi", ".mkv"]:
                 # Video mode
                 print(f"Processing video: {args.target}")
                 swap_video(
@@ -215,7 +219,9 @@ Examples:
                     args.target,
                     args.output,
                     config,
-                    progress_callback=lambda idx, total: print(f"\rProgress: {idx}/{total} frames", end="")
+                    progress_callback=lambda idx, total: print(
+                        f"\rProgress: {idx}/{total} frames", end=""
+                    ),
                 )
                 print(f"\nOutput saved to: {args.output}")
             else:
@@ -224,28 +230,32 @@ Examples:
                 result = swap_image(args.source, args.target, config)
                 cv2.imwrite(args.output, result)
                 print(f"Output saved to: {args.output}")
-        
+
         else:
             parser.print_help()
             sys.exit(1)
-    
+
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
 
 
 def run_webcam(source_path: str, camera_id: int, config: FaceSwapConfig):
-    """Run real-time webcam demo."""
-    from face_swap import start_realtime_swap
-    
+    """Run real-time webcam demo with FPS HUD + detect-every-N."""
+    import cv2
+
+    from demos.webcam_demo import WebcamDemo
+
     print(f"Starting webcam demo (Camera {camera_id})")
     print("Press 'q' in the video window to quit")
-    
-    start_realtime_swap(
-        source_img=source_path,
-        camera_id=camera_id,
-        config=config
-    )
+
+    source = cv2.imread(source_path)
+    if source is None:
+        raise ValueError(f"Could not load source image: {source_path}")
+
+    demo = WebcamDemo(config)
+    demo.initialize(source)
+    demo.run(camera_id)
 
 
 def models_main(argv: List[str]) -> None:
@@ -277,7 +287,7 @@ def models_main(argv: List[str]) -> None:
     dl_p.add_argument(
         "names",
         nargs="*",
-        help="Model names (inswapper, hyperswap, gfpgan, gpen, codeformer, xseg)",
+        help="Model names (inswapper, hyperswap, gfpgan, gpen, restoreformer, codeformer, xseg)",
     )
     dl_p.add_argument(
         "--preset",
@@ -310,12 +320,10 @@ def models_main(argv: List[str]) -> None:
         name_w = max((len(str(r["name"])) for r in rows), default=8)
         print(f"{'NAME'.ljust(name_w)}  {'VER':8}  STATUS   SIZE")
         for r in rows:
-            status = "OK" if r["present"] else ("MISS*" if r["downloadable"] else "MISS")
-            size = (
-                f"{int(r['bytes']) / (1024 * 1024):.1f} MB"
-                if r["present"]
-                else "-"
+            status = (
+                "OK" if r["present"] else ("MISS*" if r["downloadable"] else "MISS")
             )
+            size = f"{int(r['bytes']) / (1024 * 1024):.1f} MB" if r["present"] else "-"
             print(
                 f"{str(r['name']).ljust(name_w)}  {str(r['version']):8}  "
                 f"{status:7}  {size}"
@@ -389,7 +397,7 @@ def evaluate_main(argv: List[str]) -> None:
     )
     parser.add_argument(
         "--enhance",
-        choices=["gfpgan", "gpen", "codeformer", "opencv"],
+        choices=["gfpgan", "gpen", "restoreformer", "codeformer", "opencv"],
         default=None,
     )
     parser.add_argument(
@@ -440,16 +448,37 @@ def evaluate_main(argv: List[str]) -> None:
         print(json.dumps(metrics.to_dict(), indent=2))
     else:
         print("Swap metrics")
-        print(f"  faces: src={metrics.faces_source} tgt={metrics.faces_target} "
-              f"out={metrics.faces_result}")
+        print(
+            f"  faces: src={metrics.faces_source} tgt={metrics.faces_target} "
+            f"out={metrics.faces_result}"
+        )
         print(f"  id_similarity (src-out): {metrics.id_similarity:.4f}")
         print(f"  id_vs_target  (out-tgt): {metrics.id_vs_target:.4f}")
-        print(f"  sharpness out/tgt/d:     "
-              f"{metrics.sharpness_result:.1f} / {metrics.sharpness_target:.1f} / "
-              f"{metrics.sharpness_gain:+.1f}")
+        print(
+            f"  sharpness out/tgt/d:     "
+            f"{metrics.sharpness_result:.1f} / {metrics.sharpness_target:.1f} / "
+            f"{metrics.sharpness_gain:+.1f}"
+        )
         print(f"  color dE (LAB mean):     {metrics.color_delta_lab:.1f}")
-        print(f"  id gate (>={args.min_id}): "
-              f"{'PASS' if metrics.passed_id else 'WEAK'}")
+        print(
+            f"  id gate (>={args.min_id}): "
+            f"{'PASS' if metrics.passed_id else 'WEAK'}"
+        )
+
+
+def evaluate_batch_main(argv: List[str]) -> None:
+    """``python -m demos.cli evaluate-batch …`` — A/B metrics matrix."""
+    root = Path(__file__).resolve().parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from scripts.metrics_batch import main as batch_main
+
+    old = sys.argv
+    try:
+        sys.argv = ["metrics_batch"] + list(argv)
+        batch_main()
+    finally:
+        sys.argv = old
 
 
 if __name__ == "__main__":
