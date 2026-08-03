@@ -3,17 +3,36 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ravana"
+# PyPI name: `ravana` is taken by an unrelated package; distribute as ravana-sdk.
+name = "ravana-sdk"
 version = "0.3.1"
-description = "Real-Time Face Swapping System SDK"
+description = "Real-time face-swap SDK for images, video, and webcam HyperSwap/InSwapper, GFPGAN/GPEN, ONNX Runtime (CUDA, AMD DirectML, CPU)"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
-authors = [{ name = "Face Swap Team" }]
-keywords = ["face-swap", "computer-vision", "deepfake", "onnx", "realtime"]
+authors = [{ name = "Mriganka Dey", email = "mrigankadey@ascenddesign.in" }]
+keywords = [
+    "face-swap",
+    "faceswap",
+    "computer-vision",
+    "deepfake",
+    "onnx",
+    "onnxruntime",
+    "directml",
+    "cuda",
+    "hyperswap",
+    "insightface",
+    "gfpgan",
+    "realtime",
+    "webcam",
+    "video",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Graphics",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -21,6 +40,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "numpy>=1.21.0",
@@ -58,16 +78,19 @@ dev = [
     "mypy>=1.0.0",
 ]
 all = [
-    "ravana[gpu,training,enhancement,tensorrt,docs,dev]",
+    "ravana-sdk[gpu,training,enhancement,tensorrt,docs,dev]",
 ]
 
 [project.scripts]
 face-swap = "demos.cli:main"
+ravana = "demos.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mrigankad/Ravana"
 Repository = "https://github.com/mrigankad/Ravana"
 Issues = "https://github.com/mrigankad/Ravana/issues"
+Changelog = "https://github.com/mrigankad/Ravana/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/mrigankad/Ravana#readme"
 
 [tool.setuptools.packages.find]
 include = ["face_swap*", "demos*", "benchmarks*"]

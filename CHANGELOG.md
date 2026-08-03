@@ -4,6 +4,10 @@
 
 Realtime polish, metrics A/B batch, RestoreFormer++, GUI Score, and first-run hardening.
 
+### Packaging
+- PyPI distribution name **`ravana-sdk`** (PyPI `ravana` is taken); console scripts `ravana` and `face-swap`
+- README mascot header, comparison showcase, GitHub release artifacts
+
 ### Realtime
 - `FaceSwapConfig(realtime=True)` — detect-every-N, skip heavy restore, ROI track between full detects
 - Webcam HUD (FPS / detect N / ROI / enhance) + hotkeys `d` `e` `h` `r`
@@ -36,7 +40,7 @@ Seamless quality stack and developer UX for the Ravana face-swap SDK.
 ### Device & models
 - `device="auto"` (CUDA → DirectML → CPU)
 - Unified model download with progress (`ensure_downloaded` / `ModelManager`)
-- CLI: `python -m demos.cli models list|download|ensure`
+- CLI: `python -m demos.cli models st|download|ensure`
 - Presets: `core`, `seamless`, `enhance`, `all`
 
 ### Metrics & DX

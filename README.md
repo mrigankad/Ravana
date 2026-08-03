@@ -1,16 +1,30 @@
-# Ravana
+<div align="center">
+  <img src="docs/assets/mascot.png" width="280" alt="Ravana real-time face-swap SDK mascot">
+  <h1>Ravana</h1>
+  <p><b>Open-source Python face-swap SDK</b> for images, video, and webcam.<br/>
+  HyperSwap / InSwapper · GFPGAN / GPEN / CodeFormer · ONNX Runtime on <b>CUDA</b>, <b>AMD DirectML</b>, or CPU.</p>
 
-**Python face-swap SDK** for images, video, and webcam ONNX Runtime on CUDA, AMD DirectML, or CPU.
-
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.1-informational.svg)](CHANGELOG.md)
+  <p>
+    <a href="https://github.com/mrigankad/Ravana/stargazers"><img src="https://img.shields.io/github/stars/mrigankad/Ravana?style=social" alt="GitHub stars"></a>
+    <a href="https://github.com/mrigankad/Ravana/releases"><img src="https://img.shields.io/github/v/release/mrigankad/Ravana?display_name=tag" alt="Latest release"></a>
+    <img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python 3.9+">
+    <img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="MIT License">
+    <img src="https://img.shields.io/badge/ONNX-CUDA%20%7C%20DirectML%20%7C%20CPU-orange.svg" alt="ONNX backends">
+  </p>
+</div>
 
 ```bash
+# From GitHub (latest main)
+pip install "git+https://github.com/mrigankad/Ravana.git"
+
+# Or clone for extras / demos
+git clone https://github.com/mrigankad/Ravana.git && cd Ravana
 pip install -e ".[directml]"   # AMD Windows
-# or: pip install -e ".[gpu]"  # NVIDIA
-# or: pip install -e .         # CPU
+# pip install -e ".[gpu]"      # NVIDIA
+# pip install -e .             # CPU
 ```
+
+> **Package name:** install/import as `ravana-sdk` on PyPI (the name `ravana` is taken). Python imports stay `from face_swap import ...`.
 
 ---
 
@@ -40,6 +54,8 @@ pip install -e .
 pip install -e ".[gpu]"       # NVIDIA
 pip install -e ".[directml]"  # AMD Windows
 ```
+
+CLI entry points after install: `ravana` or `face-swap`.
 
 **First run** prefetch weights (or they download on first swap):
 
@@ -113,7 +129,7 @@ Quality / device / restore / pixel-boost / face select, plus **Score** on the la
 
 ## Comparisons
 
-Illustrative demo samples only (stock-style portraits). Not for identity claims — regenerate locally with the CLI.
+Illustrative demo samples only (stock-style portraits). Not for identity claims regenerate locally with the CLI.
 
 ### Source → target → seamless
 
