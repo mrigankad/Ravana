@@ -7,8 +7,8 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QImage, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv"}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
 
 def bgr_to_qpixmap(frame: np.ndarray, max_side: int = 640) -> QPixmap:
@@ -56,39 +57,112 @@ def load_path_pixmap(path: str, max_side: int = 320) -> QPixmap:
 
 
 class _Pane(QWidget):
-    def __init__(self, title: str, parent: Optional[QWidget] = None):
+    """Droppable preview pane."""
+
+    file_dropped = Signal(str)
+
+    def __init__(
+        self,
+        title: str,
+        placeholder: str,
+        *,
+        accept_images: bool = True,
+        accept_videos: bool = False,
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent)
+        self._placeholder = placeholder
+        self._accept_images = accept_images
+        self._accept_videos = accept_videos
+        self.setAcceptDrops(True)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
         title_lbl = QLabel(title)
         title_lbl.setObjectName("paneTitle")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image = QLabel("—")
+        self.image = QLabel(placeholder)
+        self.image.setObjectName("hint")
         self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image.setMinimumSize(180, 180)
+        self.image.setWordWrap(True)
+        self.image.setMinimumSize(200, 220)
         self.image.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.image.setStyleSheet("background-color: #1c1c1c; border: 1px solid #2a2a2a;")
+        self.image.setStyleSheet(
+            "background-color: #1a1a1a; border: 1px dashed #3a3a3a; border-radius: 6px;"
+        )
         layout.addWidget(title_lbl)
         layout.addWidget(self.image, stretch=1)
 
     def set_pixmap(self, pix: QPixmap) -> None:
         if pix.isNull():
-            self.image.setText("—")
+            self.image.setText(self._placeholder)
             self.image.setPixmap(QPixmap())
+            self.image.setStyleSheet(
+                "background-color: #1a1a1a; border: 1px dashed #3a3a3a; border-radius: 6px;"
+            )
             return
+        self.image.setStyleSheet(
+            "background-color: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 6px;"
+        )
+        target = self.image.size()
+        if target.width() < 40 or target.height() < 40:
+            target = pix.size()
         scaled = pix.scaled(
-            self.image.size() if self.image.width() > 40 else pix.size(),
+            target,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
         self.image.setPixmap(scaled)
         self.image.setText("")
 
+    def _accepts_path(self, path: str) -> bool:
+        ext = Path(path).suffix.lower()
+        if self._accept_images and ext in IMAGE_EXTS:
+            return True
+        if self._accept_videos and ext in VIDEO_EXTS:
+            return True
+        return False
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls and self._accepts_path(urls[0].toLocalFile()):
+                event.acceptProposedAction()
+                self.image.setStyleSheet(
+                    "background-color: #242018; border: 2px solid #c9a227; border-radius: 6px;"
+                )
+                return
+        event.ignore()
+
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802
+        if self.image.pixmap() is None or self.image.pixmap().isNull():
+            self.image.setStyleSheet(
+                "background-color: #1a1a1a; border: 1px dashed #3a3a3a; border-radius: 6px;"
+            )
+        else:
+            self.image.setStyleSheet(
+                "background-color: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 6px;"
+            )
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        path = urls[0].toLocalFile()
+        if self._accepts_path(path):
+            self.file_dropped.emit(path)
+            event.acceptProposedAction()
+
 
 class PreviewStage(QWidget):
     """Stacked preview: image triple OR single live/video surface."""
+
+    source_dropped = Signal(str)
+    target_dropped = Signal(str)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -97,28 +171,50 @@ class PreviewStage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.addWidget(self._stack)
 
-        # Page 0 — source | target | result
         images = QWidget()
         row = QHBoxLayout(images)
         row.setContentsMargins(0, 0, 0, 0)
-        self._source_pane = _Pane("Source")
-        self._target_pane = _Pane("Target")
-        self._result_pane = _Pane("Result")
+        row.setSpacing(8)
+        self._source_pane = _Pane(
+            "Source",
+            "Drop source face\nor click Select",
+            accept_images=True,
+            accept_videos=False,
+        )
+        self._target_pane = _Pane(
+            "Target",
+            "Drop target image/video\nor click Select",
+            accept_images=True,
+            accept_videos=True,
+        )
+        self._result_pane = _Pane(
+            "Result",
+            "Swap output appears here",
+            accept_images=False,
+            accept_videos=False,
+        )
+        self._result_pane.setAcceptDrops(False)
+        self._source_pane.file_dropped.connect(self.source_dropped.emit)
+        self._target_pane.file_dropped.connect(self.target_dropped.emit)
         row.addWidget(self._source_pane)
         row.addWidget(self._target_pane)
         row.addWidget(self._result_pane)
         self._stack.addWidget(images)
 
-        # Page 1 — video / webcam
         live = QWidget()
         live_l = QVBoxLayout(live)
         live_l.setContentsMargins(0, 0, 0, 0)
+        self._live_title = QLabel("LIVE / VIDEO")
+        self._live_title.setObjectName("paneTitle")
+        self._live_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._live_label = QLabel("Live preview")
+        self._live_label.setObjectName("hint")
         self._live_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._live_label.setMinimumSize(480, 320)
         self._live_label.setStyleSheet(
-            "background-color: #1c1c1c; border: 1px solid #2a2a2a;"
+            "background-color: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 6px;"
         )
+        live_l.addWidget(self._live_title)
         live_l.addWidget(self._live_label)
         self._stack.addWidget(live)
 
@@ -171,6 +267,7 @@ class PreviewStage(QWidget):
     def show_video_path(self, path: str) -> None:
         self.stop_playback()
         self._stack.setCurrentIndex(1)
+        self._live_title.setText("RESULT VIDEO")
         cap = cv2.VideoCapture(path)
         if not cap.isOpened():
             self._live_label.setText("Could not open video")
@@ -189,7 +286,6 @@ class PreviewStage(QWidget):
             return
         ok, frame = self._cap.read()
         if not ok or frame is None:
-            # Loop
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             ok, frame = self._cap.read()
             if not ok or frame is None:

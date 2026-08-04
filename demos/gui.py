@@ -12,13 +12,19 @@ def main():
 
     import sys
 
-    from demos.gui_app.main_window import MainWindow
+    from demos.gui_app.main_window import MainWindow, load_app_icon
     from demos.gui_app.theme import APP_STYLESHEET
 
     app = QApplication(sys.argv)
     app.setApplicationName("Ravana")
+    app.setDesktopFileName("Ravana")
+    icon = load_app_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     app.setStyleSheet(APP_STYLESHEET)
     win = MainWindow()
+    if not icon.isNull():
+        win.setWindowIcon(icon)
     win.show()
     sys.exit(app.exec())
 
