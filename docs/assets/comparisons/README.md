@@ -1,4 +1,4 @@
-# Comparison showcase assets
+﻿# Comparison showcase assets
 
-Illustrative sample portraits (public stock / OpenCV-style faces) used in the README.
-Regenerate locally with the demos CLI; do not commit bulk `data/` experiment dumps.
+Demo portraits from Unsplash (free license) used in the README.
+Swap outputs regenerated locally with `quality=seamless`.
