@@ -28,7 +28,7 @@ pip install -e ".[directml]"   # AMD Windows
 
 ---
 
-## Features (0.3.2)
+## Features (0.3.3)
 
 | Area | What’s included |
 |------|-----------------|

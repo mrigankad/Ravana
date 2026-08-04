@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3 — 2026-08-04
+
+### GUI
+- Drag-and-drop source/target panes, sidebar thumbnails, File/Run/Help menus + shortcuts
+- Batch processing panel (add files/folder, output dir, progress, cancel)
+- Webcam camera ID + detect-every-N; Open folder; inline score strip; mascot window icon (`.ico`)
+- README gallery: desktop screenshots + run strip
+
 ## 0.3.2 — 2026-08-04
 
 ### GUI

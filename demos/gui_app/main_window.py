@@ -34,7 +34,7 @@ from demos.gui_app.config import VIDEO_EXTS, build_config
 from demos.gui_app.preview import IMAGE_EXTS, PreviewStage, load_path_pixmap
 from demos.gui_app.workers import BatchWorker, ScoreWorker, SwapWorker, WebcamWorker
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 
 
 def _mascot_path() -> Path:
