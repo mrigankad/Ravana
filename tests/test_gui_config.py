@@ -1,4 +1,4 @@
-from demos.gui_app.workers import build_config
+from demos.gui_app.config import build_config
 
 
 def test_build_config_defaults():
