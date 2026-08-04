@@ -17,6 +17,7 @@ __all__ = [
     "SwapWorker",
     "ScoreWorker",
     "WebcamWorker",
+    "BatchWorker",
 ]
 
 
@@ -154,5 +155,98 @@ class WebcamWorker(QThread):
                 self.frame_ready.emit(out.copy())
             cap.release()
             self.status.emit("Webcam stopped")
+        except Exception as e:
+            self.failed.emit(str(e))
+
+
+class BatchWorker(QThread):
+    """Process many targets with one source face; progress 0–100."""
+
+    progress = Signal(int)
+    status = Signal(str)
+    finished = Signal(str)
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        source: str,
+        targets: list[str],
+        output_dir: str,
+        config: FaceSwapConfig,
+    ):
+        super().__init__()
+        self.source = source
+        self.targets = list(targets)
+        self.output_dir = output_dir
+        self.config = config
+        self._running = True
+
+    def stop(self) -> None:
+        self._running = False
+
+    def run(self) -> None:
+        try:
+            if not self.targets:
+                raise RuntimeError("No target files in the batch list")
+            out_dir = Path(self.output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            src = cv2.imread(self.source)
+            if src is None:
+                raise RuntimeError("Could not load source image")
+
+            # Reuse one pipeline for images (same as face_swap.batch_swap)
+            pipeline = FaceSwapPipeline(self.config.to_pipeline_config())
+            emb = pipeline.extract_source_embedding(src)
+
+            total = len(self.targets)
+            done: list[str] = []
+            skipped = 0
+
+            for i, target_path in enumerate(self.targets):
+                if not self._running:
+                    self.status.emit(f"Batch cancelled ({len(done)}/{total})")
+                    break
+
+                name = Path(target_path).name
+                self.status.emit(f"Batch {i + 1}/{total}: {name}")
+                self.progress.emit(int(i / max(total, 1) * 100))
+
+                suffix = Path(target_path).suffix.lower()
+                output_file = out_dir / f"swapped_{name}"
+
+                try:
+                    if suffix in VIDEO_EXTS:
+                        swap_video(
+                            self.source,
+                            target_path,
+                            str(output_file),
+                            self.config,
+                        )
+                        done.append(str(output_file))
+                    else:
+                        tgt = cv2.imread(target_path)
+                        if tgt is None:
+                            skipped += 1
+                            continue
+                        result = pipeline.process_frame(tgt, emb)
+                        cv2.imwrite(str(output_file), result)
+                        done.append(str(output_file))
+                except Exception as item_err:
+                    skipped += 1
+                    self.status.emit(f"Skip {name}: {item_err}")
+
+            self.progress.emit(100)
+            if not done:
+                self.failed.emit(
+                    f"Batch produced no outputs ({skipped} skipped) → {out_dir}"
+                )
+                return
+            summary = (
+                f"Batch done: {len(done)} saved"
+                + (f", {skipped} skipped" if skipped else "")
+                + f" → {out_dir}"
+            )
+            self.finished.emit(summary)
         except Exception as e:
             self.failed.emit(str(e))

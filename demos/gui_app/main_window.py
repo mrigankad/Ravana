@@ -18,10 +18,13 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -29,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from demos.gui_app.config import VIDEO_EXTS, build_config
 from demos.gui_app.preview import IMAGE_EXTS, PreviewStage, load_path_pixmap
-from demos.gui_app.workers import ScoreWorker, SwapWorker, WebcamWorker
+from demos.gui_app.workers import BatchWorker, ScoreWorker, SwapWorker, WebcamWorker
 
 VERSION = "0.3.2"
 
@@ -95,6 +98,8 @@ class MainWindow(QMainWindow):
         self._swap_worker: Optional[SwapWorker] = None
         self._score_worker: Optional[ScoreWorker] = None
         self._webcam_worker: Optional[WebcamWorker] = None
+        self._batch_worker: Optional[BatchWorker] = None
+        self._batch_output_dir: Optional[str] = None
         self._last_dir = str(Path.home())
 
         central = QWidget()
@@ -153,9 +158,13 @@ class MainWindow(QMainWindow):
         cam = QAction("Toggle &webcam", self)
         cam.setShortcut(QKeySequence("Ctrl+W"))
         cam.triggered.connect(self._toggle_webcam)
+        batch = QAction("Run &batch", self)
+        batch.setShortcut(QKeySequence("Ctrl+B"))
+        batch.triggered.connect(self._start_batch)
         run_menu.addAction(swap)
         run_menu.addAction(score)
         run_menu.addAction(cam)
+        run_menu.addAction(batch)
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction("&About Ravana", self)
@@ -182,10 +191,14 @@ class MainWindow(QMainWindow):
         return row
 
     def _build_left_rail(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFixedWidth(320)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         rail = QWidget()
-        rail.setFixedWidth(300)
         layout = QVBoxLayout(rail)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 0, 6, 0)
         layout.setSpacing(8)
 
         brand = QLabel()
@@ -292,8 +305,43 @@ class MainWindow(QMainWindow):
         live_form.addRow("Detect every N", self.detect_every)
         layout.addWidget(live)
 
+        batch = QGroupBox("Batch")
+        bl = QVBoxLayout(batch)
+        self.batch_list = QListWidget()
+        self.batch_list.setMinimumHeight(100)
+        self.batch_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.batch_list.setToolTip("Targets to process with the current source face")
+        bl.addWidget(self.batch_list)
+
+        batch_btns = QHBoxLayout()
+        add_files = QPushButton("Add files")
+        add_files.clicked.connect(self._batch_add_files)
+        add_folder = QPushButton("Add folder")
+        add_folder.clicked.connect(self._batch_add_folder)
+        remove_sel = QPushButton("Remove")
+        remove_sel.clicked.connect(self._batch_remove_selected)
+        clear_batch = QPushButton("Clear")
+        clear_batch.clicked.connect(self.batch_list.clear)
+        batch_btns.addWidget(add_files)
+        batch_btns.addWidget(add_folder)
+        batch_btns.addWidget(remove_sel)
+        batch_btns.addWidget(clear_batch)
+        bl.addLayout(batch_btns)
+
+        out_row = QHBoxLayout()
+        self.batch_out_label = QLabel("Output: (same as first target / batch_out)")
+        self.batch_out_label.setObjectName("muted")
+        self.batch_out_label.setWordWrap(True)
+        pick_out = QPushButton("Output folder")
+        pick_out.clicked.connect(self._batch_pick_output)
+        out_row.addWidget(self.batch_out_label, stretch=1)
+        out_row.addWidget(pick_out)
+        bl.addLayout(out_row)
+        layout.addWidget(batch)
+
         layout.addStretch(1)
-        return rail
+        scroll.setWidget(rail)
+        return scroll
 
     def _build_score_strip(self) -> QLabel:
         self.score_chip = QLabel("Score: run a swap, then Score (Ctrl+E)")
@@ -318,6 +366,10 @@ class MainWindow(QMainWindow):
         self.webcam_btn.setToolTip("Ctrl+W")
         self.webcam_btn.clicked.connect(self._toggle_webcam)
 
+        self.batch_btn = QPushButton("Run batch")
+        self.batch_btn.setToolTip("Ctrl+B — process all files in the Batch list")
+        self.batch_btn.clicked.connect(self._start_batch)
+
         self.save_btn = QPushButton("Save As…")
         self.save_btn.clicked.connect(self._save_as)
 
@@ -328,6 +380,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.swap_btn, stretch=2)
         row.addWidget(self.score_btn)
         row.addWidget(self.webcam_btn)
+        row.addWidget(self.batch_btn)
         row.addWidget(self.save_btn)
         row.addWidget(self.reveal_btn)
         return row
@@ -557,6 +610,153 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
 
+    def _batch_paths(self) -> list[str]:
+        paths = []
+        for i in range(self.batch_list.count()):
+            item = self.batch_list.item(i)
+            path = item.data(Qt.ItemDataRole.UserRole) or item.text()
+            if path:
+                paths.append(str(path))
+        return paths
+
+    def _batch_add_paths(self, paths: list[str]) -> None:
+        existing = set(self._batch_paths())
+        added = 0
+        for path in paths:
+            p = Path(path)
+            if not p.is_file():
+                continue
+            ext = p.suffix.lower()
+            if ext not in IMAGE_EXTS and ext not in VIDEO_EXTS:
+                continue
+            key = str(p.resolve())
+            if key in existing:
+                continue
+            item = QListWidgetItem(p.name)
+            item.setData(Qt.ItemDataRole.UserRole, key)
+            item.setToolTip(key)
+            self.batch_list.addItem(item)
+            existing.add(key)
+            added += 1
+        if added:
+            self._set_status(f"Batch: +{added} file(s), {self.batch_list.count()} total")
+            if not self._batch_output_dir and paths:
+                first = Path(paths[0])
+                self._batch_output_dir = str(first.parent / "batch_out")
+                self.batch_out_label.setText(f"Output: {self._batch_output_dir}")
+
+    def _batch_add_files(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Add batch targets",
+            self._last_dir,
+            "Images & Videos (*.png *.jpg *.jpeg *.webp *.bmp *.mp4 *.mov *.avi *.mkv);;"
+            "All files (*.*)",
+        )
+        if files:
+            self._last_dir = str(Path(files[0]).parent)
+            self._batch_add_paths(files)
+
+    def _batch_add_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self, "Add folder of targets", self._last_dir
+        )
+        if not folder:
+            return
+        self._last_dir = folder
+        paths = []
+        for p in sorted(Path(folder).iterdir()):
+            if p.suffix.lower() in IMAGE_EXTS or p.suffix.lower() in VIDEO_EXTS:
+                paths.append(str(p))
+        self._batch_add_paths(paths)
+
+    def _batch_remove_selected(self) -> None:
+        for item in self.batch_list.selectedItems():
+            row = self.batch_list.row(item)
+            self.batch_list.takeItem(row)
+
+    def _batch_pick_output(self) -> None:
+        start = self._batch_output_dir or self._last_dir
+        folder = QFileDialog.getExistingDirectory(self, "Batch output folder", start)
+        if folder:
+            self._batch_output_dir = folder
+            self.batch_out_label.setText(f"Output: {folder}")
+
+    def _start_batch(self) -> None:
+        if self._batch_worker and self._batch_worker.isRunning():
+            self._batch_worker.stop()
+            self.batch_btn.setText("Run batch")
+            self._set_status("Cancelling batch...")
+            return
+        if self._swap_worker and self._swap_worker.isRunning():
+            QMessageBox.information(self, "Busy", "Wait for the current swap to finish.")
+            return
+        if self._webcam_worker and self._webcam_worker.isRunning():
+            QMessageBox.information(self, "Busy", "Stop webcam before batch.")
+            return
+        if not self._source_path:
+            QMessageBox.warning(self, "Missing input", "Select a source face image first.")
+            return
+        targets = self._batch_paths()
+        if not targets:
+            QMessageBox.warning(
+                self,
+                "Empty batch",
+                "Add target files or a folder in the Batch panel.",
+            )
+            return
+        out_dir = self._batch_output_dir
+        if not out_dir:
+            out_dir = str(Path(targets[0]).parent / "batch_out")
+            self._batch_output_dir = out_dir
+            self.batch_out_label.setText(f"Output: {out_dir}")
+
+        self.batch_btn.setText("Cancel batch")
+        self.swap_btn.setEnabled(False)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self._set_status(f"Batch: 0/{len(targets)}...")
+
+        worker = BatchWorker(
+            self._source_path,
+            targets,
+            out_dir,
+            self._current_config(),
+        )
+        worker.progress.connect(self.progress.setValue)
+        worker.status.connect(self._set_status)
+        worker.finished.connect(self._on_batch_finished)
+        worker.failed.connect(self._on_batch_failed)
+        self._batch_worker = worker
+        worker.start()
+
+    def _on_batch_finished(self, summary: str) -> None:
+        self.batch_btn.setText("Run batch")
+        self.swap_btn.setEnabled(True)
+        self._set_status(summary)
+        self.score_chip.setText(summary)
+        reply = QMessageBox.question(
+            self,
+            "Batch complete",
+            f"{summary}\n\nOpen output folder?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes and self._batch_output_dir:
+            folder = self._batch_output_dir
+            if sys.platform == "win32":
+                os.startfile(folder)  # noqa: S606
+            elif sys.platform == "darwin":
+                subprocess.run(["open", folder], check=False)
+            else:
+                subprocess.run(["xdg-open", folder], check=False)
+
+    def _on_batch_failed(self, error: str) -> None:
+        self.batch_btn.setText("Run batch")
+        self.swap_btn.setEnabled(True)
+        self.progress.setValue(0)
+        self._set_status("Batch failed")
+        QMessageBox.critical(self, "Batch failed", error)
+
     def _save_as(self) -> None:
         if not self._output_path or not Path(self._output_path).is_file():
             QMessageBox.warning(self, "No result", "Nothing to save yet.")
@@ -587,10 +787,13 @@ class MainWindow(QMainWindow):
             "Open-source face-swap SDK<br/>"
             "HyperSwap / InSwapper · GFPGAN / GPEN · ONNX<br/><br/>"
             "Shortcuts: Ctrl+O source · Ctrl+T target · "
-            "Ctrl+Enter swap · Ctrl+E score · Ctrl+W webcam",
+            "Ctrl+Enter swap · Ctrl+E score · Ctrl+W webcam · Ctrl+B batch",
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        if self._batch_worker and self._batch_worker.isRunning():
+            self._batch_worker.stop()
+            self._batch_worker.wait(3000)
         if self._webcam_worker and self._webcam_worker.isRunning():
             self._webcam_worker.stop()
             self._webcam_worker.wait(3000)
