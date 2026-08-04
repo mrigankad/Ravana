@@ -13,9 +13,13 @@ class _Face:
             np.asarray(kps, dtype=np.float32)
             if kps is not None
             else np.array(
-                [[bbox[0] + 10, bbox[1] + 10], [bbox[2] - 10, bbox[1] + 10],
-                 [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
-                 [bbox[0] + 10, bbox[3] - 10], [bbox[2] - 10, bbox[3] - 10]],
+                [
+                    [bbox[0] + 10, bbox[1] + 10],
+                    [bbox[2] - 10, bbox[1] + 10],
+                    [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2],
+                    [bbox[0] + 10, bbox[3] - 10],
+                    [bbox[2] - 10, bbox[3] - 10],
+                ],
                 dtype=np.float32,
             )
         )

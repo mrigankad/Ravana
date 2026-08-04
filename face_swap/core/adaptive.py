@@ -75,7 +75,9 @@ class AdaptiveConfig:
     auto_det_size: bool = True
 
 
-def choose_det_size(image: np.ndarray, prefer_small_faces: bool = False) -> Tuple[int, int]:
+def choose_det_size(
+    image: np.ndarray, prefer_small_faces: bool = False
+) -> Tuple[int, int]:
     """
     Pick a detection window from image dimensions.
 
@@ -105,7 +107,9 @@ def choose_det_size(image: np.ndarray, prefer_small_faces: bool = False) -> Tupl
     return (target, target)
 
 
-def pad_to_square(image: np.ndarray, pad_value: int = 0) -> Tuple[np.ndarray, Tuple[int, int]]:
+def pad_to_square(
+    image: np.ndarray, pad_value: int = 0
+) -> Tuple[np.ndarray, Tuple[int, int]]:
     """Pad to square; returns (padded, (pad_x, pad_y) top-left offset)."""
     h, w = image.shape[:2]
     side = max(h, w)
@@ -190,7 +194,9 @@ def detect_faces_adaptive(
             faces = [_shift_face(f, dx, dy) for f in faces]
 
         face_app._ravana_det_size = det_size
-        logger.debug("Detected %d face(s) via %s det_size=%s", len(faces), label, det_size)
+        logger.debug(
+            "Detected %d face(s) via %s det_size=%s", len(faces), label, det_size
+        )
         return faces
 
     return []
@@ -300,8 +306,7 @@ def rank_sources_by_pose(
     Returns list of (index, compatibility) sorted best-first.
     """
     scored = [
-        (i, pose_compatibility(src, target_face))
-        for i, src in enumerate(source_faces)
+        (i, pose_compatibility(src, target_face)) for i, src in enumerate(source_faces)
     ]
     scored.sort(key=lambda t: t[1], reverse=True)
     return scored
@@ -454,7 +459,9 @@ def upscale_if_small_face(
     if getattr(face, "kps", None) is not None:
         face.kps = face.kps.astype(np.float32) * scale
 
-    logger.debug("Upscaled source face ×%.2f (%dpx → ~%dpx)", scale, int(side), int(side * scale))
+    logger.debug(
+        "Upscaled source face ×%.2f (%dpx → ~%dpx)", scale, int(side), int(side * scale)
+    )
     return scaled, face, float(scale)
 
 
@@ -669,8 +676,8 @@ def detect_lower_face_hair(
     Heuristic: lower third much darker than mid-face → likely beard/stubble.
     """
     lab = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2LAB)
-    l = lab[:, :, 0].astype(np.float32)
-    h, w = l.shape
+    lum = lab[:, :, 0].astype(np.float32)
+    h, w = lum.shape
     if face_mask is not None:
         m = face_mask.astype(np.float32)
         if m.ndim == 3:
@@ -687,8 +694,8 @@ def detect_lower_face_hair(
     low &= m
     if mid.sum() < 40 or low.sum() < 40:
         return False
-    mid_l = float(l[mid].mean())
-    low_l = float(l[low].mean())
+    mid_l = float(lum[mid].mean())
+    low_l = float(lum[low].mean())
     # Beard: lower zone ≥12 L darker
     return (mid_l - low_l) >= 12.0
 

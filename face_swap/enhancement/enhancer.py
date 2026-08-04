@@ -39,7 +39,9 @@ CODEFORMER_ONNX_URLS = (
     "https://huggingface.co/facefusion/models-3.0.0/resolve/main/codeformer.onnx",
 )
 CODEFORMER_ONNX_DEFAULT = os.path.join("models", "codeformer.onnx")
-CODEFORMER_ONNX_SHA256 = "21710e7ab61c82683576c428e9c1b6fe1ed419586b7b39e394c3449c294b550f"
+CODEFORMER_ONNX_SHA256 = (
+    "21710e7ab61c82683576c428e9c1b6fe1ed419586b7b39e394c3449c294b550f"
+)
 
 # FaceFusion GPEN-BFR 512 ONNX (~284 MB)
 GPEN_ONNX_URLS = (
@@ -55,7 +57,9 @@ RESTOREFORMER_ONNX_URLS = (
     "https://huggingface.co/facefusion/models-3.0.0/resolve/main/restoreformer_plus_plus.onnx",
 )
 RESTOREFORMER_ONNX_DEFAULT = os.path.join("models", "restoreformer_plus_plus.onnx")
-RESTOREFORMER_ONNX_SHA256 = "f4db5a89902b6a2d452446f5721245a6f7185f699b6aec7b77285adb4d504337"
+RESTOREFORMER_ONNX_SHA256 = (
+    "f4db5a89902b6a2d452446f5721245a6f7185f699b6aec7b77285adb4d504337"
+)
 
 
 @dataclass
@@ -138,7 +142,9 @@ class GFPGANOnnxEnhancer(FaceEnhancer):
         providers = resolve_ort_providers(self.config.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
         self._input_name = self._session.get_inputs()[0].name
         logger.info(
             "GFPGAN ONNX loaded (%s) providers=%s",
@@ -327,7 +333,9 @@ class CodeFormerOnnxEnhancer(FaceEnhancer):
         providers = resolve_ort_providers(self.config.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
 
         self._has_weight = False
         self._weight_name = None
@@ -371,7 +379,9 @@ class CodeFormerOnnxEnhancer(FaceEnhancer):
             face, (self.FACE_SIZE, self.FACE_SIZE), interpolation=cv2.INTER_LANCZOS4
         )
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        blob = ((rgb - 0.5) / 0.5).transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+        blob = (
+            ((rgb - 0.5) / 0.5).transpose(2, 0, 1)[np.newaxis, ...].astype(np.float32)
+        )
 
         feeds = {self._input_name: blob}
         if self._has_weight and self._weight_name:
@@ -423,7 +433,9 @@ class GPENOnnxEnhancer(FaceEnhancer):
         providers = resolve_ort_providers(self.config.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
         self._input_name = self._session.get_inputs()[0].name
         logger.info(
             "GPEN ONNX loaded (%s) providers=%s",
@@ -491,7 +503,9 @@ class RestoreFormerOnnxEnhancer(FaceEnhancer):
         providers = resolve_ort_providers(self.config.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
         self._input_name = self._session.get_inputs()[0].name
         logger.info(
             "RestoreFormer ONNX loaded (%s) providers=%s",
@@ -566,16 +580,20 @@ class OpenCVEnhancer(FaceEnhancer):
         # Mild path by default — aggressive CLAHE bleaches skin vs neck
         mild = getattr(self.config, "blend_weight", 1.0) < 0.95
 
-        den = cv2.bilateralFilter(img, d=5, sigmaColor=35 if mild else 40, sigmaSpace=35)
+        den = cv2.bilateralFilter(
+            img, d=5, sigmaColor=35 if mild else 40, sigmaSpace=35
+        )
         blur = cv2.GaussianBlur(den, (0, 0), sigmaX=1.0 if mild else 1.2)
-        sharp = cv2.addWeighted(den, 1.25 if mild else 1.45, blur, -0.25 if mild else -0.45, 0)
+        sharp = cv2.addWeighted(
+            den, 1.25 if mild else 1.45, blur, -0.25 if mild else -0.45, 0
+        )
 
         lab = cv2.cvtColor(sharp, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
+        lum, a, b = cv2.split(lab)
         clip = 1.2 if mild else 1.8
         clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=(4, 4))
-        l = clahe.apply(l)
-        out = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+        lum = clahe.apply(lum)
+        out = cv2.cvtColor(cv2.merge([lum, a, b]), cv2.COLOR_LAB2BGR)
         return out
 
 
@@ -646,7 +664,9 @@ def enhance_with_tiles(
                 restored = enhancer.enhance(patch, upscale=1)
                 wmask = weight
             if restored.shape[:2] != (ph, pw):
-                restored = cv2.resize(restored, (pw, ph), interpolation=cv2.INTER_LINEAR)
+                restored = cv2.resize(
+                    restored, (pw, ph), interpolation=cv2.INTER_LINEAR
+                )
             out[y0:y1, x0:x1] += restored.astype(np.float32) * wmask[:, :, None]
             acc[y0:y1, x0:x1] += wmask
 
@@ -704,8 +724,8 @@ def enhance_face_region(
         enhanced = cv2.resize(enhanced, (rw, rh), interpolation=cv2.INTER_AREA)
 
     w_blend = float(np.clip(blend_weight, 0.0, 1.0))
-    restored = (
-        w_blend * enhanced.astype(np.float32) + (1.0 - w_blend) * crop.astype(np.float32)
+    restored = w_blend * enhanced.astype(np.float32) + (1.0 - w_blend) * crop.astype(
+        np.float32
     )
 
     mask = np.zeros((rh, rw), dtype=np.float32)

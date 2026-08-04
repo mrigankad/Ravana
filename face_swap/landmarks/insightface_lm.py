@@ -5,7 +5,7 @@ Preferred default on modern Python where MediaPipe no longer ships
 the legacy ``mp.solutions`` Face Mesh API.
 """
 
-from typing import List, Optional
+from typing import List
 
 import cv2
 import numpy as np

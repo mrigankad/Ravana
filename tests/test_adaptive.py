@@ -1,10 +1,9 @@
 """Unit tests for adaptive preprocessing helpers (no model download)."""
 
-import numpy as np
 import cv2
+import numpy as np
 
 from face_swap.core.adaptive import (
-    AdaptiveConfig,
     adaptive_mask_kernels,
     choose_det_size,
     cosine_similarity,
@@ -22,7 +21,7 @@ from face_swap.core.adaptive import (
     reinhard_color_match,
     skin_likelihood_mask,
 )
-from face_swap.enhancement import OpenCVEnhancer, create_enhancer, EnhancementConfig
+from face_swap.enhancement import EnhancementConfig, OpenCVEnhancer, create_enhancer
 
 
 class TestChooseDetSize:
@@ -74,7 +73,9 @@ class TestPadAndColor:
         pale = np.full((64, 64, 3), (210, 200, 180), dtype=np.uint8)
         tan = np.full((64, 64, 3), (80, 130, 180), dtype=np.uint8)
         out = match_chrominance_to_target(pale, tan, strength=1.0)
-        pale_l = cv2.cvtColor(pale, cv2.COLOR_BGR2LAB)[:, :, 0].astype(np.float32).mean()
+        pale_l = (
+            cv2.cvtColor(pale, cv2.COLOR_BGR2LAB)[:, :, 0].astype(np.float32).mean()
+        )
         out_l = cv2.cvtColor(out, cv2.COLOR_BGR2LAB)[:, :, 0].astype(np.float32).mean()
         assert abs(out_l - pale_l) < 3.0
 

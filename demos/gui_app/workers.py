@@ -1,15 +1,23 @@
-"""QThread workers for swap, score, and webcam."""
+"""QThread workers for swap, score, webcam, and model download."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import List, Optional
 
 import cv2
 from PySide6.QtCore import QThread, Signal
 
 from demos.gui_app.config import VIDEO_EXTS, build_config
-from face_swap import FaceSwapConfig, FaceSwapPipeline, evaluate_swap, swap_image, swap_video
+from face_swap import (
+    FaceSwapConfig,
+    FaceSwapPipeline,
+    evaluate_swap,
+    swap_image,
+    swap_video,
+)
 from face_swap.core.fast_video import FastVideoConfig
+from face_swap.core.model_manager import MODEL_PRESETS, ModelManager
 
 __all__ = [
     "VIDEO_EXTS",
@@ -18,7 +26,77 @@ __all__ = [
     "ScoreWorker",
     "WebcamWorker",
     "BatchWorker",
+    "ModelsDownloadWorker",
+    "missing_preset_models",
 ]
+
+
+def missing_preset_models(
+    models_dir: str | Path,
+    preset: str = "seamless",
+) -> List[str]:
+    """Return model names in ``preset`` that are not present on disk."""
+    key = preset.lower().strip()
+    if key not in MODEL_PRESETS:
+        raise ValueError(f"Unknown preset {preset!r}")
+    mgr = ModelManager(str(models_dir))
+    missing: List[str] = []
+    for name in MODEL_PRESETS[key]:
+        info = mgr.get_model(name)
+        if info is None or not info.is_downloaded:
+            missing.append(name)
+    return missing
+
+
+class ModelsDownloadWorker(QThread):
+    progress = Signal(int)
+    status = Signal(str)
+    finished = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, models_dir: str, preset: str = "seamless"):
+        super().__init__()
+        self.models_dir = models_dir
+        self.preset = preset
+
+    def run(self) -> None:
+        try:
+            key = self.preset.lower().strip()
+            if key not in MODEL_PRESETS:
+                raise ValueError(f"Unknown preset {self.preset!r}")
+            names = list(MODEL_PRESETS[key])
+            mgr = ModelManager(self.models_dir)
+            total = max(len(names), 1)
+
+            for i, name in enumerate(names):
+                self.status.emit(f"Downloading {name} ({i + 1}/{total})...")
+
+                def _cb(
+                    received: int,
+                    total_bytes: Optional[int],
+                    *,
+                    _i: int = i,
+                    _name: str = name,
+                ) -> None:
+                    if total_bytes and total_bytes > 0:
+                        frac = min(1.0, received / total_bytes)
+                        overall = int(((_i + frac) / total) * 100)
+                        self.progress.emit(overall)
+                        mb = received / (1024 * 1024)
+                        tot = total_bytes / (1024 * 1024)
+                        self.status.emit(
+                            f"{_name}: {mb:.0f}/{tot:.0f} MB ({i + 1}/{total})"
+                        )
+                    else:
+                        self.status.emit(f"Downloading {_name}...")
+
+                mgr.ensure_model(name, show_progress=False, progress=_cb)
+                self.progress.emit(int((i + 1) / total * 100))
+
+            self.progress.emit(100)
+            self.finished.emit(f"Models ready ({key}) → {self.models_dir}")
+        except Exception as e:
+            self.failed.emit(str(e))
 
 
 class SwapWorker(QThread):
@@ -80,9 +158,7 @@ class ScoreWorker(QThread):
 
     def run(self) -> None:
         try:
-            m = evaluate_swap(
-                self.source, self.target, self.result, device=self.device
-            )
+            m = evaluate_swap(self.source, self.target, self.result, device=self.device)
             msg = (
                 f"id={m.id_similarity:.3f}  vs_tgt={m.id_vs_target:.3f}\n"
                 f"sharp={m.sharpness_result:.1f} (d{m.sharpness_gain:+.1f})\n"

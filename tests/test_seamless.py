@@ -1,7 +1,6 @@
 """Tests for seamless quality preset and enhance_face_region boost/blend."""
 
 import numpy as np
-import cv2
 
 from face_swap.api import FaceSwapConfig
 from face_swap.enhancement import (
@@ -67,7 +66,9 @@ class TestEnhanceFaceRegion:
             frame, bbox, enh, feather=5, blend_weight=1.0, target_face_px=0
         )
         # OpenCV enhancer alters interior pixels
-        assert not np.array_equal(out[60, 60], frame[60, 60]) or out.mean() != frame.mean()
+        assert (
+            not np.array_equal(out[60, 60], frame[60, 60]) or out.mean() != frame.mean()
+        )
 
     def test_target_px_boost_preserves_frame_shape(self):
         frame, bbox = self._frame_and_bbox()
@@ -120,9 +121,7 @@ class TestEnhanceFaceRegion:
 
 class TestPixelBoostTiles:
     def test_pixel_boost_override(self):
-        pipe = FaceSwapConfig(
-            quality="seamless", pixel_boost=512
-        ).to_pipeline_config()
+        pipe = FaceSwapConfig(quality="seamless", pixel_boost=512).to_pipeline_config()
         assert pipe.enhance_target_px == 512
         pipe0 = FaceSwapConfig(quality="seamless", pixel_boost=0).to_pipeline_config()
         assert pipe0.enhance_target_px == 0

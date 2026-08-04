@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 — 2026-08-04
+
+### Packaging
+- Windows one-folder GUI executable via PyInstaller (`scripts/build_exe.ps1` → `dist/Ravana/`)
+- Release zip helper (`scripts/package_release.ps1`); models stay outside the bundle
+
+### GUI
+- First-run prompt + Help → Download models (seamless preset into `./models` next to the exe)
+- Frozen path helpers so mascot icon and `./models` work in the packaged app
+
 ## 0.3.3 — 2026-08-04
 
 ### GUI

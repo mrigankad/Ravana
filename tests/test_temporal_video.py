@@ -20,8 +20,12 @@ class TestEmaSmoothFaces:
         assert np.allclose(out[0].bbox, f.bbox)
 
     def test_ema_pulls_toward_previous(self):
-        prev = _Face([0, 0, 100, 100], [[20, 30], [80, 30], [50, 50], [30, 80], [70, 80]])
-        cur = _Face([20, 20, 120, 120], [[40, 50], [100, 50], [70, 70], [50, 100], [90, 100]])
+        prev = _Face(
+            [0, 0, 100, 100], [[20, 30], [80, 30], [50, 50], [30, 80], [70, 80]]
+        )
+        cur = _Face(
+            [20, 20, 120, 120], [[40, 50], [100, 50], [70, 70], [50, 100], [90, 100]]
+        )
         expected = 0.5 * cur.bbox + 0.5 * prev.bbox
         out = ema_smooth_insight_faces([cur], [prev], alpha=0.5)
         assert np.allclose(out[0].bbox, expected, atol=1e-4)

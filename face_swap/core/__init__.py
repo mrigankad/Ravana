@@ -2,7 +2,6 @@
 Core types, utilities, and infrastructure for the face swap pipeline.
 """
 
-from .config_loader import load_config, load_face_swap_config, load_pipeline_config
 from .adaptive import (
     AdaptiveConfig,
     FaceQuality,
@@ -12,6 +11,7 @@ from .adaptive import (
     identity_preserved,
     reinhard_color_match,
 )
+from .config_loader import load_config, load_face_swap_config, load_pipeline_config
 from .metrics import (
     MetricsAnalyzer,
     SwapMetrics,

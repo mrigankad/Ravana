@@ -73,6 +73,7 @@ class InSwapperModel(FaceSwapper):
 
         try:
             import onnxruntime as ort
+
             from face_swap.core.fast_video import configure_ort_session_options
 
             opts = configure_ort_session_options(
@@ -193,9 +194,9 @@ class InSwapperModel(FaceSwapper):
         M: np.ndarray,
     ) -> Frame:
         """Official InsightFace paste-back (erode + Gaussian soft mask)."""
-        fake_diff = np.abs(
-            bgr_fake.astype(np.float32) - aimg.astype(np.float32)
-        ).mean(axis=2)
+        fake_diff = np.abs(bgr_fake.astype(np.float32) - aimg.astype(np.float32)).mean(
+            axis=2
+        )
         fake_diff[:2, :] = 0
         fake_diff[-2:, :] = 0
         fake_diff[:, :2] = 0

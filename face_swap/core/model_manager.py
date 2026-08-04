@@ -43,15 +43,16 @@ class ModelInfo:
 
     @property
     def is_downloaded(self) -> bool:
-        return (
-            os.path.isfile(self.path)
-            and os.path.getsize(self.path) >= max(1, self.min_bytes)
+        return os.path.isfile(self.path) and os.path.getsize(self.path) >= max(
+            1, self.min_bytes
         )
 
     @property
     def mirrors(self) -> List[str]:
         urls: List[str] = []
-        for u in list(self.download_urls) + ([self.download_url] if self.download_url else []):
+        for u in list(self.download_urls) + (
+            [self.download_url] if self.download_url else []
+        ):
             if u and u not in urls:
                 urls.append(u)
         return urls
@@ -96,7 +97,15 @@ MODEL_PRESETS: Dict[str, List[str]] = {
     "core": ["inswapper"],
     "seamless": ["hyperswap", "gfpgan", "xseg"],
     "enhance": ["gfpgan", "gpen", "codeformer", "restoreformer"],
-    "all": ["inswapper", "hyperswap", "gfpgan", "gpen", "codeformer", "restoreformer", "xseg"],
+    "all": [
+        "inswapper",
+        "hyperswap",
+        "gfpgan",
+        "gpen",
+        "codeformer",
+        "restoreformer",
+        "xseg",
+    ],
 }
 
 
@@ -193,9 +202,7 @@ def ensure_downloaded(
             return path
 
     if not urls:
-        raise FileNotFoundError(
-            f"Model not found locally and no download URL: {path}"
-        )
+        raise FileNotFoundError(f"Model not found locally and no download URL: {path}")
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     last_err: Optional[Exception] = None
@@ -213,7 +220,9 @@ def ensure_downloaded(
                 progress=progress,
                 show_progress=show_progress,
             )
-            if not (os.path.isfile(path) and os.path.getsize(path) >= max(1, min_bytes)):
+            if not (
+                os.path.isfile(path) and os.path.getsize(path) >= max(1, min_bytes)
+            ):
                 raise RuntimeError(f"Downloaded file too small: {path}")
             if sha256 and not _verify_sha256(path, sha256):
                 logger.warning(
@@ -334,8 +343,14 @@ class ModelManager:
             resolution=512,
             description="RestoreFormer++ face restore (ONNX)",
             download_urls=[
-                "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/restoreformer_plus_plus.onnx",
-                "https://huggingface.co/facefusion/models-3.0.0/resolve/main/restoreformer_plus_plus.onnx",
+                (
+                    "https://github.com/facefusion/facefusion-assets/releases/"
+                    "download/models-3.0.0/restoreformer_plus_plus.onnx"
+                ),
+                (
+                    "https://huggingface.co/facefusion/models-3.0.0/resolve/"
+                    "main/restoreformer_plus_plus.onnx"
+                ),
             ],
             sha256="f4db5a89902b6a2d452446f5721245a6f7185f699b6aec7b77285adb4d504337",
             min_bytes=50_000_000,

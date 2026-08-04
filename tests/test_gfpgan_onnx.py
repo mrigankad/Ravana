@@ -1,9 +1,8 @@
 """Tests for ONNX GFPGAN enhancer (no model download required for unit tests)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
-import cv2
 
 from face_swap.enhancement import EnhancementConfig, GFPGANOnnxEnhancer, create_enhancer
 

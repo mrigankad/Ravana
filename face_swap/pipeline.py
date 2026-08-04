@@ -106,7 +106,9 @@ class PipelineConfig:
     min_id_similarity: float = 0.25
     # Post-swap face restore (opencv always available; gfpgan if installed)
     enable_enhance: bool = True
-    enhance_method: str = "opencv"  # opencv | gfpgan | gpen | restoreformer | codeformer | realesrgan
+    enhance_method: str = (
+        "opencv"  # opencv | gfpgan | gpen | restoreformer | codeformer | realesrgan
+    )
     enhance_blend: float = 1.0  # 0..1 mix of restored vs swapped crop
     enhance_target_px: int = 0  # 0 = no boost; seamless uses 1024 (tiled)
     enhance_fidelity: float = 0.5  # CodeFormer weight: 0=quality, 1=fidelity

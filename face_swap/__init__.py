@@ -10,6 +10,7 @@ __author__ = "Face Swap Team"
 from .api import FaceSwapConfig, batch_swap, start_realtime_swap, swap_image, swap_video
 from .audio import AudioProcessor
 from .core.config_loader import load_config, load_face_swap_config, load_pipeline_config
+from .core.metrics import MetricsAnalyzer, SwapMetrics, evaluate_swap
 from .core.model_manager import (
     MODEL_PRESETS,
     ModelInfo,
@@ -19,7 +20,6 @@ from .core.model_manager import (
 from .core.model_router import ModelProfile, ModelRouter, SceneType
 from .core.profiler import BenchmarkReport, PipelineProfiler, StageTimings
 from .core.quality import QualityCode, QualityReport, QualityValidator
-from .core.metrics import MetricsAnalyzer, SwapMetrics, evaluate_swap
 from .core.types import (
     AlignedFace,
     Embedding,

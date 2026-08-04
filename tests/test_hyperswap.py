@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import cv2
 import numpy as np
 
 from face_swap.api import FaceSwapConfig

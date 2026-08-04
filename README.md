@@ -127,6 +127,16 @@ pip install -e ".[gui]"   # PySide6
 python -m demos.gui
 ```
 
+Windows one-folder executable (PyInstaller; large because of torch/onnx):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1
+# → dist\Ravana\Ravana.exe  (models download on first run, or copy models\ beside the exe)
+
+powershell -ExecutionPolicy Bypass -File .\scripts\package_release.ps1
+# → dist\Ravana-0.3.4-windows-x64.zip
+```
+
 <p align="center">
   <img src="docs/assets/gui/gui_swap_result.png" width="900" alt="Ravana desktop GUI showing source, target, seamless result, and score metrics">
 </p>

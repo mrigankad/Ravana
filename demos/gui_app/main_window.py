@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
@@ -31,24 +31,31 @@ from PySide6.QtWidgets import (
 )
 
 from demos.gui_app.config import VIDEO_EXTS, build_config
+from demos.gui_app.paths import models_dir, resource_path
 from demos.gui_app.preview import IMAGE_EXTS, PreviewStage, load_path_pixmap
-from demos.gui_app.workers import BatchWorker, ScoreWorker, SwapWorker, WebcamWorker
+from demos.gui_app.workers import (
+    BatchWorker,
+    ModelsDownloadWorker,
+    ScoreWorker,
+    SwapWorker,
+    WebcamWorker,
+    missing_preset_models,
+)
 
-VERSION = "0.3.3"
-
-
-def _mascot_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "docs" / "assets" / "mascot.png"
+VERSION = "0.3.4"
 
 
 def _mascot_icon_path() -> Path:
-    root = Path(__file__).resolve().parents[2] / "docs" / "assets"
+    root = resource_path("docs", "assets")
     ico = root / "mascot.ico"
-    return ico if ico.is_file() else root / "mascot.png"
+    if ico.is_file():
+        return ico
+    png = root / "mascot.png"
+    return png
 
 
 def load_mascot_pixmap(max_side: int = 48) -> QPixmap:
-    path = _mascot_path()
+    path = _mascot_icon_path()
     if not path.is_file():
         return QPixmap()
     pix = QPixmap(str(path))
@@ -99,8 +106,10 @@ class MainWindow(QMainWindow):
         self._score_worker: Optional[ScoreWorker] = None
         self._webcam_worker: Optional[WebcamWorker] = None
         self._batch_worker: Optional[BatchWorker] = None
+        self._models_worker: Optional[ModelsDownloadWorker] = None
         self._batch_output_dir: Optional[str] = None
         self._last_dir = str(Path.home())
+        self._models_prompted = False
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -123,6 +132,8 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_score_strip())
         root.addLayout(self._build_actions())
         root.addLayout(self._build_footer())
+
+        QTimer.singleShot(600, self._maybe_prompt_models)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
@@ -167,8 +178,12 @@ class MainWindow(QMainWindow):
         run_menu.addAction(batch)
 
         help_menu = self.menuBar().addMenu("&Help")
+        download = QAction("&Download models…", self)
+        download.triggered.connect(lambda: self._start_model_download(prompt=True))
         about = QAction("&About Ravana", self)
         about.triggered.connect(self._about)
+        help_menu.addAction(download)
+        help_menu.addSeparator()
         help_menu.addAction(about)
 
     def _build_header(self) -> QHBoxLayout:
@@ -450,7 +465,9 @@ class MainWindow(QMainWindow):
     def _apply_target(self, path: str) -> None:
         ext = Path(path).suffix.lower()
         if ext not in IMAGE_EXTS and ext not in VIDEO_EXTS:
-            QMessageBox.warning(self, "Invalid target", "Target must be image or video.")
+            QMessageBox.warning(
+                self, "Invalid target", "Target must be image or video."
+            )
             return
         self._target_path = path
         self._output_path = None
@@ -489,6 +506,9 @@ class MainWindow(QMainWindow):
         if self._swap_worker and self._swap_worker.isRunning():
             QMessageBox.information(self, "Busy", "Processing already in progress.")
             return
+        if self._models_worker and self._models_worker.isRunning():
+            QMessageBox.information(self, "Busy", "Wait for model download to finish.")
+            return
         if self._webcam_worker and self._webcam_worker.isRunning():
             QMessageBox.information(self, "Busy", "Stop webcam before swapping.")
             return
@@ -496,7 +516,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing input", "Select a source face image.")
             return
         if not self._target_path:
-            QMessageBox.warning(self, "Missing input", "Select a target image or video.")
+            QMessageBox.warning(
+                self, "Missing input", "Select a target image or video."
+            )
             return
 
         target = Path(self._target_path)
@@ -533,7 +555,9 @@ class MainWindow(QMainWindow):
 
     def _score_result(self) -> None:
         if not self._source_path or not self._target_path:
-            QMessageBox.warning(self, "Missing input", "Select source and target first.")
+            QMessageBox.warning(
+                self, "Missing input", "Select source and target first."
+            )
             return
         if not self._output_path or not Path(self._output_path).is_file():
             QMessageBox.warning(self, "No result", "Run a face swap first.")
@@ -576,7 +600,9 @@ class MainWindow(QMainWindow):
             self._set_status("Stopping webcam...")
             return
         if not self._source_path:
-            QMessageBox.warning(self, "Missing input", "Select a source face image first.")
+            QMessageBox.warning(
+                self, "Missing input", "Select a source face image first."
+            )
             return
         if self._swap_worker and self._swap_worker.isRunning():
             QMessageBox.information(self, "Busy", "Wait for swap to finish.")
@@ -639,7 +665,9 @@ class MainWindow(QMainWindow):
             existing.add(key)
             added += 1
         if added:
-            self._set_status(f"Batch: +{added} file(s), {self.batch_list.count()} total")
+            self._set_status(
+                f"Batch: +{added} file(s), {self.batch_list.count()} total"
+            )
             if not self._batch_output_dir and paths:
                 first = Path(paths[0])
                 self._batch_output_dir = str(first.parent / "batch_out")
@@ -689,13 +717,17 @@ class MainWindow(QMainWindow):
             self._set_status("Cancelling batch...")
             return
         if self._swap_worker and self._swap_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Wait for the current swap to finish.")
+            QMessageBox.information(
+                self, "Busy", "Wait for the current swap to finish."
+            )
             return
         if self._webcam_worker and self._webcam_worker.isRunning():
             QMessageBox.information(self, "Busy", "Stop webcam before batch.")
             return
         if not self._source_path:
-            QMessageBox.warning(self, "Missing input", "Select a source face image first.")
+            QMessageBox.warning(
+                self, "Missing input", "Select a source face image first."
+            )
             return
         targets = self._batch_paths()
         if not targets:
@@ -779,6 +811,89 @@ class MainWindow(QMainWindow):
             return
         _reveal_in_explorer(self._output_path)
 
+    def _maybe_prompt_models(self) -> None:
+        if self._models_prompted:
+            return
+        self._models_prompted = True
+        try:
+            missing = missing_preset_models(models_dir(), "seamless")
+        except Exception as exc:
+            self._set_status(f"Model check failed: {exc}")
+            return
+        if not missing:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Download models?",
+            "Seamless face-swap needs weights that are not on disk yet:\n\n"
+            + ", ".join(missing)
+            + f"\n\nDownload into:\n{models_dir()}\n\n"
+            "(You can also use Help → Download models… later.)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._start_model_download(prompt=False)
+
+    def _start_model_download(self, *, prompt: bool = True) -> None:
+        if self._models_worker and self._models_worker.isRunning():
+            QMessageBox.information(self, "Busy", "Model download already running.")
+            return
+        if any(
+            w and w.isRunning()
+            for w in (self._swap_worker, self._batch_worker, self._webcam_worker)
+        ):
+            QMessageBox.information(self, "Busy", "Finish the current job first.")
+            return
+
+        dest = models_dir()
+        if prompt:
+            missing = missing_preset_models(dest, "seamless")
+            if not missing:
+                QMessageBox.information(
+                    self,
+                    "Models ready",
+                    f"Seamless preset is already present in:\n{dest}",
+                )
+                return
+            reply = QMessageBox.question(
+                self,
+                "Download models",
+                "Download seamless weights " f"({', '.join(missing)}) into:\n{dest}?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        self.swap_btn.setEnabled(False)
+        self.batch_btn.setEnabled(False)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self._set_status("Downloading models...")
+
+        worker = ModelsDownloadWorker(str(dest), "seamless")
+        worker.progress.connect(self.progress.setValue)
+        worker.status.connect(self._set_status)
+        worker.finished.connect(self._on_models_done)
+        worker.failed.connect(self._on_models_failed)
+        self._models_worker = worker
+        worker.start()
+
+    def _on_models_done(self, summary: str) -> None:
+        self.swap_btn.setEnabled(True)
+        self.batch_btn.setEnabled(True)
+        self.progress.setValue(100)
+        self._set_status(summary)
+        QMessageBox.information(self, "Models ready", summary)
+
+    def _on_models_failed(self, error: str) -> None:
+        self.swap_btn.setEnabled(True)
+        self.batch_btn.setEnabled(True)
+        self.progress.setValue(0)
+        self._set_status("Model download failed")
+        QMessageBox.critical(self, "Download failed", error)
+
     def _about(self) -> None:
         QMessageBox.about(
             self,
@@ -786,6 +901,7 @@ class MainWindow(QMainWindow):
             f"<b>Ravana</b> v{VERSION}<br/>"
             "Open-source face-swap SDK<br/>"
             "HyperSwap / InSwapper · GFPGAN / GPEN · ONNX<br/><br/>"
+            f"Models folder: <code>{models_dir()}</code><br/><br/>"
             "Shortcuts: Ctrl+O source · Ctrl+T target · "
             "Ctrl+Enter swap · Ctrl+E score · Ctrl+W webcam · Ctrl+B batch",
         )
@@ -794,6 +910,8 @@ class MainWindow(QMainWindow):
         if self._batch_worker and self._batch_worker.isRunning():
             self._batch_worker.stop()
             self._batch_worker.wait(3000)
+        if self._models_worker and self._models_worker.isRunning():
+            self._models_worker.wait(1500)
         if self._webcam_worker and self._webcam_worker.isRunning():
             self._webcam_worker.stop()
             self._webcam_worker.wait(3000)

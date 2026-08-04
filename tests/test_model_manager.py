@@ -119,11 +119,10 @@ class TestModelManager:
         Path(info.path).parent.mkdir(parents=True, exist_ok=True)
         Path(info.path).write_bytes(b"x" * (info.min_bytes + 10))
 
-        with patch(
-            "face_swap.core.model_manager._verify_sha256", return_value=True
-        ), patch(
-            "face_swap.core.model_manager.download_with_progress"
-        ) as dl:
+        with (
+            patch("face_swap.core.model_manager._verify_sha256", return_value=True),
+            patch("face_swap.core.model_manager.download_with_progress") as dl,
+        ):
             out = manager.ensure_model("xseg", show_progress=False)
             assert out.path == info.path
             dl.assert_not_called()
@@ -164,11 +163,12 @@ class TestEnsureDownloaded:
     def test_returns_existing(self, tmp_path):
         path = tmp_path / "m.onnx"
         path.write_bytes(b"a" * 2000)
-        with patch(
-            "face_swap.core.model_manager.download_with_progress"
-        ) as dl:
+        with patch("face_swap.core.model_manager.download_with_progress") as dl:
             out = ensure_downloaded(
-                str(path), urls=["http://example/m.onnx"], min_bytes=1000, show_progress=False
+                str(path),
+                urls=["http://example/m.onnx"],
+                min_bytes=1000,
+                show_progress=False,
             )
             assert out == str(path)
             dl.assert_not_called()

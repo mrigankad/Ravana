@@ -38,9 +38,9 @@ def _paste_back_insightface(
     M: np.ndarray,
 ) -> np.ndarray:
     """InsightFace-style paste-back (shared with InSwapper semantics)."""
-    fake_diff = np.abs(
-        bgr_fake.astype(np.float32) - aimg.astype(np.float32)
-    ).mean(axis=2)
+    fake_diff = np.abs(bgr_fake.astype(np.float32) - aimg.astype(np.float32)).mean(
+        axis=2
+    )
     fake_diff[:2, :] = 0
     fake_diff[-2:, :] = 0
     fake_diff[:, :2] = 0
@@ -114,7 +114,9 @@ class HyperSwapModel(FaceSwapper):
         providers = resolve_ort_providers(self.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
 
         inputs = self._session.get_inputs()
         by_name = {i.name: i for i in inputs}
@@ -157,7 +159,9 @@ class HyperSwapModel(FaceSwapper):
         )
 
     @staticmethod
-    def _source_latent(source_face: Any, target_face: Any, swap_weight: float) -> np.ndarray:
+    def _source_latent(
+        source_face: Any, target_face: Any, swap_weight: float
+    ) -> np.ndarray:
         """
         Build (1, 512) embedding.
 

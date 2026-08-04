@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -113,7 +113,9 @@ class XSegOccluder:
         providers = resolve_ort_providers(self.device)
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(path, sess_options=opts, providers=providers)
+        self._session = ort.InferenceSession(
+            path, sess_options=opts, providers=providers
+        )
         inp = self._session.get_inputs()[0]
         self._input_name = inp.name
         shape = inp.shape
@@ -178,7 +180,9 @@ class XSegOccluder:
                 blob = img[np.newaxis, ...]
             else:
                 # BGR→RGB for NCHW models that expect RGB
-                rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                rgb = (
+                    cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+                )
                 blob = rgb.transpose(2, 0, 1)[np.newaxis, ...]
 
             out = self._session.run(None, {self._input_name: blob})[0]

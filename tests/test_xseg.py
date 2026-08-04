@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import cv2
 import numpy as np
 
 from face_swap.api import FaceSwapConfig
@@ -14,21 +13,27 @@ class TestApplyOcclusionBlend:
         original = np.zeros((64, 64, 3), dtype=np.uint8)
         swapped = np.full((64, 64, 3), 200, dtype=np.uint8)
         mask = np.ones((40, 40), dtype=np.float32)
-        out = apply_occlusion_blend(original, swapped, (12, 12, 52, 52), mask, pad_frac=0.0)
+        out = apply_occlusion_blend(
+            original, swapped, (12, 12, 52, 52), mask, pad_frac=0.0
+        )
         assert np.allclose(out[20:40, 20:40], 200)
 
     def test_mask_zero_keeps_original(self):
         original = np.full((64, 64, 3), 50, dtype=np.uint8)
         swapped = np.full((64, 64, 3), 200, dtype=np.uint8)
         mask = np.zeros((40, 40), dtype=np.float32)
-        out = apply_occlusion_blend(original, swapped, (12, 12, 52, 52), mask, pad_frac=0.0)
+        out = apply_occlusion_blend(
+            original, swapped, (12, 12, 52, 52), mask, pad_frac=0.0
+        )
         assert np.allclose(out[20:40, 20:40], 50)
 
     def test_half_mask_blends(self):
         original = np.zeros((32, 32, 3), dtype=np.uint8)
         swapped = np.full((32, 32, 3), 100, dtype=np.uint8)
         mask = np.full((20, 20), 0.5, dtype=np.float32)
-        out = apply_occlusion_blend(original, swapped, (6, 6, 26, 26), mask, pad_frac=0.0)
+        out = apply_occlusion_blend(
+            original, swapped, (6, 6, 26, 26), mask, pad_frac=0.0
+        )
         mid = float(out[16, 16, 0])
         assert 40 < mid < 60
 
