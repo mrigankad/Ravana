@@ -119,11 +119,14 @@ python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
 
 ### GUI
 
+PySide6 desktop app with branded layout, source/target/result previews, in-app video playback, and embedded webcam (no separate OpenCV window).
+
 ```bash
+pip install -e ".[gui]"   # PySide6
 python -m demos.gui
 ```
 
-Quality / device / restore / pixel-boost / face select, plus **Score** on the last output.
+Quality / device / restore / pixel-boost / face select, plus **Score** and **Save As** on the last output.
 
 ---
 
