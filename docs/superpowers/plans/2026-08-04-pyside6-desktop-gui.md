@@ -372,11 +372,13 @@ class WebcamWorker(QThread):
             if not cap.isOpened():
                 raise RuntimeError(f"Camera {self.camera_id} failed to open")
             self.status.emit("Webcam live")
+            frame_i = 0
             while self._running:
                 ok, frame = cap.read()
                 if not ok:
                     break
-                out = pipeline.swap_face(emb, frame)
+                out = pipeline.process_video_frame(frame, emb, frame_i)
+                frame_i += 1
                 self.frame_ready.emit(out.copy())
             cap.release()
             self.status.emit("Webcam stopped")
@@ -384,15 +386,15 @@ class WebcamWorker(QThread):
             self.failed.emit(str(e))
 ```
 
-Import `FaceSwapConfig` at top of file (already used by `build_config`).
+Import `FaceSwapConfig` at top of file (already used by `build_config`). Use `FaceSwapPipeline.process_video_frame(frame, embedding, frame_number)` — same as `demos/webcam_demo.py` (returns BGR `ndarray`).
 
-- [ ] **Step 2: Verify `pipeline.swap_face` exists**
+- [ ] **Step 2: Confirm signature**
 
 ```bash
-python -c "from face_swap import FaceSwapPipeline; print(hasattr(FaceSwapPipeline, 'swap_face'))"
+python -c "import inspect; from face_swap.pipeline import FaceSwapPipeline; print(inspect.signature(FaceSwapPipeline.process_video_frame))"
 ```
 
-If `False`, use the same per-frame API as `demos/webcam_demo.py` (`process_frame` or whatever that file calls — read `WebcamDemo.run` and mirror the call in `WebcamWorker.run`).
+Expected: `(self, frame, source_embedding, frame_number=0)`.
 
 - [ ] **Step 3: Commit**
 
