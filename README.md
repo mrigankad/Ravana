@@ -39,7 +39,7 @@ pip install -e ".[directml]"   # AMD Windows
 | **Metrics** | ArcFace ID + sharpness (`evaluate` / `evaluate-batch` / GUI Score) |
 | **Models** | Progress download CLI + presets (`core`, `seamless`, `enhance`, `all`) |
 | **Device** | `device="auto"` → CUDA → DirectML → CPU |
-| **Desktop GUI** | PySide6 app (`pip install -e ".[gui]"`) — previews, video, embedded webcam |
+| **Desktop GUI** | PySide6 app — drag-drop, batch, webcam, score (`pip install -e ".[gui]"`) |
 
 ---
 
@@ -120,14 +120,36 @@ python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
 
 ### GUI
 
-PySide6 desktop app with branded layout, source/target/result previews, in-app video playback, and embedded webcam (no separate OpenCV window).
+PySide6 desktop app with branded layout, drag-and-drop, source/target/result previews, batch processing, in-app video playback, and embedded webcam.
 
 ```bash
 pip install -e ".[gui]"   # PySide6
 python -m demos.gui
 ```
 
-Quality / device / restore / pixel-boost / face select, plus **Score** and **Save As** on the last output.
+<p align="center">
+  <img src="docs/assets/gui/gui_swap_result.png" width="900" alt="Ravana desktop GUI showing source, target, seamless result, and score metrics">
+</p>
+
+<p align="center">
+  <img src="docs/assets/gui/gui_overview.png" width="900" alt="Ravana desktop GUI empty state with drop zones and controls">
+</p>
+
+Quality / device / restore / pixel-boost / face select, plus **Score**, **Run batch**, **Webcam**, and **Save As**.
+
+---
+
+## Gallery
+
+Sample desktop run (same pair as below) and quality variants:
+
+<p align="center">
+  <img src="docs/assets/gui/runs_strip.jpg" width="900" alt="Source, target, seamless, GPEN, and pixel-boost 1024 outputs">
+</p>
+
+| Face select `all` | Face select `largest` |
+|:-----------------:|:---------------------:|
+| ![all](docs/assets/gui/two_all_preview.jpg) | ![largest](docs/assets/gui/two_largest_preview.jpg) |
 
 ---
 
