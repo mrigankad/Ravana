@@ -27,7 +27,7 @@ from demos.gui_app.config import VIDEO_EXTS, build_config
 from demos.gui_app.preview import PreviewStage
 from demos.gui_app.workers import ScoreWorker, SwapWorker, WebcamWorker
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 
 class MainWindow(QMainWindow):

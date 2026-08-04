@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 # PyPI name: `ravana` is taken by an unrelated package; distribute as ravana-sdk.
 name = "ravana-sdk"
-version = "0.3.1"
+version = "0.3.2"
 description = "Real-time face-swap SDK for images, video, and webcam HyperSwap/InSwapper, GFPGAN/GPEN, ONNX Runtime (CUDA, AMD DirectML, CPU)"
 readme = "README.md"
 license = { file = "LICENSE" }

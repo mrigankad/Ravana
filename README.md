@@ -28,7 +28,7 @@ pip install -e ".[directml]"   # AMD Windows
 
 ---
 
-## Features (0.3.1)
+## Features (0.3.2)
 
 | Area | What’s included |
 |------|-----------------|
@@ -39,6 +39,7 @@ pip install -e ".[directml]"   # AMD Windows
 | **Metrics** | ArcFace ID + sharpness (`evaluate` / `evaluate-batch` / GUI Score) |
 | **Models** | Progress download CLI + presets (`core`, `seamless`, `enhance`, `all`) |
 | **Device** | `device="auto"` → CUDA → DirectML → CPU |
+| **Desktop GUI** | PySide6 app (`pip install -e ".[gui]"`) — previews, video, embedded webcam |
 
 ---
 

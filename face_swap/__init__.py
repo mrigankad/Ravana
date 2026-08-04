@@ -4,7 +4,7 @@ Face Swap SDK - Real-Time Face Swapping System
 A production-ready SDK for face swapping on images, pre-recorded video, and live webcam streams.
 """
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 __author__ = "Face Swap Team"
 
 from .api import FaceSwapConfig, batch_swap, start_realtime_swap, swap_image, swap_video

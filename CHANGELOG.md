@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 — 2026-08-04
 
 ### GUI
 - PySide6 desktop app replaces Tkinter: branded layout, image previews, in-app video playback, embedded webcam
