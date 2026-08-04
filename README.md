@@ -141,10 +141,14 @@ Quality / device / restore / pixel-boost / face select, plus **Score**, **Run ba
 
 ## Gallery
 
-Sample desktop run (same pair as below) and quality variants:
+Higher-resolution Unsplash demo portraits (replacing the old tiny thumbnails), swapped locally with `quality=seamless`:
 
 <p align="center">
   <img src="docs/assets/gui/runs_strip.jpg" width="900" alt="Source, target, seamless, GPEN, and pixel-boost 1024 outputs">
+</p>
+
+<p align="center">
+  <img src="docs/assets/gui/runs_strip_b.jpg" width="700" alt="Second demo pair: source, target, seamless result">
 </p>
 
 | Face select `all` | Face select `largest` |
@@ -155,7 +159,7 @@ Sample desktop run (same pair as below) and quality variants:
 
 ## Comparisons
 
-Illustrative demo samples only (stock-style portraits). Not for identity claims regenerate locally with the CLI.
+Illustrative Unsplash portraits for demo quality only — not for identity claims. Regenerate locally with the CLI.
 
 ### Source → target → seamless
 
@@ -164,6 +168,12 @@ Illustrative demo samples only (stock-style portraits). Not for identity claims 
 | ![source](docs/assets/comparisons/woman1.jpg) | ![target](docs/assets/comparisons/man1.jpg) | ![seamless](docs/assets/comparisons/seamless_woman1_on_man1.jpg) |
 
 Also available: [GPEN restore](docs/assets/comparisons/gpen_woman1_on_man1.jpg) on the same pair.
+
+### Alternate pair
+
+| Source | Target | Seamless |
+|:------:|:------:|:--------:|
+| ![source](docs/assets/comparisons/source_b.jpg) | ![target](docs/assets/comparisons/target_b.jpg) | ![seamless](docs/assets/comparisons/seamless_b.jpg) |
 
 ### Pixel boost 512 vs 1024
 
