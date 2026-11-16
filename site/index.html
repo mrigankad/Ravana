@@ -146,7 +146,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}
 <pre><code>pip install "git+https://github.com/mrigankad/Ravana.git"            # CPU
 pip install "ravana-sdk[gpu] @ git+https://github.com/mrigankad/Ravana.git"       # NVIDIA
 pip install "ravana-sdk[directml] @ git+https://github.com/mrigankad/Ravana.git"  # AMD / Intel
-python scripts/first_run_check.py --download</code></pre></div>
+ravana doctor   # explains which GPU is used and how to fix it</code></pre></div>
     <div><h3>Three lines</h3>
 <pre><code>import cv2
 from face_swap import FaceSwapConfig, swap_image

@@ -44,7 +44,8 @@ If Ravana saves you time, a ⭐ helps other people find it.
 pip install "git+https://github.com/mrigankad/Ravana.git"     # CPU
 pip install "ravana-sdk[gpu] @ git+https://github.com/mrigankad/Ravana.git"       # NVIDIA
 pip install "ravana-sdk[directml] @ git+https://github.com/mrigankad/Ravana.git"  # AMD / Intel on Windows
-python scripts/first_run_check.py --download   # checks your GPU and fetches models
+ravana doctor                                    # explains which GPU is used and how to fix it
+ravana models download --preset seamless
 ```
 
 ```python
@@ -115,6 +116,7 @@ ravana -s source.jpg -t input.mp4  -o out.mp4 -q medium
 python -m demos.webcam_demo -s source.jpg --detect-every 3
 ravana models download --preset seamless
 ravana evaluate -s source.jpg -t target.jpg -o out.jpg
+ravana doctor --json                 # paste this into bug reports
 ```
 
 ## Roadmap
@@ -144,6 +146,8 @@ The only official download is [GitHub Releases](https://github.com/mrigankad/Rav
 Ravana is for VFX, entertainment, privacy and creative work **with the consent of everyone shown**. Don't use it to impersonate, deceive or harass. Label synthetic media where the law requires it (for example EU AI Act Art. 50). An optional invisible watermark is available for provenance.
 
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports: include `ravana doctor --json`.
 
 ```bash
 python -m pytest tests/ -q

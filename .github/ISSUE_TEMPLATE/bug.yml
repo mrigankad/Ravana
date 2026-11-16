@@ -1,0 +1,33 @@
+name: Bug report
+description: Something broke or looks wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `ravana doctor --json`
+      description: This tells us your GPU, onnxruntime build and models. Most install bugs are visible here.
+      render: json
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options: [Desktop app, CLI, Python SDK, Webcam / live, Windows zip release]
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Responsible use
+      options:
+        - label: I only use Ravana with the consent of the people shown.
+          required: true

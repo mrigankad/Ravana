@@ -22,6 +22,8 @@ from face_swap.core.io import imread_unicode, imwrite_unicode
 
 def main():
     """Main entry point for CLI."""
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        return doctor_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "models":
         return models_main(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "evaluate":
@@ -257,6 +259,22 @@ def run_webcam(source_path: str, camera_id: int, config: FaceSwapConfig):
     demo = WebcamDemo(config)
     demo.initialize(source)
     demo.run(camera_id)
+
+
+def doctor_main(argv: List[str]) -> int:
+    """``ravana doctor``: explain which device runs and how to fix GPU setup."""
+    import argparse
+    import json
+
+    from face_swap.core import doctor
+
+    parser = argparse.ArgumentParser(prog="ravana doctor", description="Check GPU, runtime and model setup")
+    parser.add_argument("--models-dir", default="./models")
+    parser.add_argument("--json", action="store_true", help="Machine-readable output for bug reports")
+    args = parser.parse_args(argv)
+    rep = doctor.run(args.models_dir)
+    print(json.dumps(rep.to_dict(), indent=2) if args.json else doctor.format_report(rep))
+    sys.exit(1 if rep.status == doctor.FAIL else 0)
 
 
 def models_main(argv: List[str]) -> None:

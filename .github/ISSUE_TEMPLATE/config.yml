@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install or GPU help
+    url: https://github.com/mrigankad/Ravana#get-started
+    about: Run `ravana doctor` first. It explains most GPU setup problems and how to fix them.
