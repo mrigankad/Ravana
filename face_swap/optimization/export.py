@@ -254,6 +254,7 @@ class _ImageCalibrator:
 
         import cv2
 
+        from ..core.io import imread_unicode
         try:
             import pycuda.driver as cuda
         except ImportError:
@@ -261,7 +262,7 @@ class _ImageCalibrator:
             return None
 
         h, w = self.input_shape[2], self.input_shape[3]
-        img = cv2.imread(self._images[self._idx])
+        img = imread_unicode(self._images[self._idx])
         img = cv2.resize(img, (w, h))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = img.astype(np.float32) / 255.0

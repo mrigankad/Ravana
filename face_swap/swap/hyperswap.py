@@ -37,48 +37,55 @@ def _paste_back_insightface(
     aimg: np.ndarray,
     M: np.ndarray,
 ) -> np.ndarray:
-    """InsightFace-style paste-back (shared with InSwapper semantics)."""
-    fake_diff = np.abs(bgr_fake.astype(np.float32) - aimg.astype(np.float32)).mean(
-        axis=2
-    )
-    fake_diff[:2, :] = 0
-    fake_diff[-2:, :] = 0
-    fake_diff[:, :2] = 0
-    fake_diff[:, -2:] = 0
+    """InsightFace-style paste-back, restricted to the (padded) face ROI.
 
-    IM = cv2.invertAffineTransform(M)
+    Same erode + Gaussian soft-mask semantics as the full-frame version, but the
+    warp, erosion, blur and blend run only on the bounding box of the warped
+    crop (padded by the erode/blur support), so cost scales with face area.
+    Pixels outside the ROI are returned untouched.
+    """
+    IM = cv2.invertAffineTransform(M).astype(np.float64)
     h, w = frame.shape[:2]
-    img_white = np.full((aimg.shape[0], aimg.shape[1]), 255, dtype=np.float32)
-    bgr_w = cv2.warpAffine(bgr_fake, IM, (w, h), borderValue=0.0)
-    img_white = cv2.warpAffine(img_white, IM, (w, h), borderValue=0.0)
-    fake_diff = cv2.warpAffine(fake_diff, IM, (w, h), borderValue=0.0)
+    ch, cw = aimg.shape[:2]
 
-    img_white[img_white > 20] = 255
-    fake_diff[fake_diff < 10] = 0
-    fake_diff[fake_diff >= 10] = 255
-
-    mask_h_inds, mask_w_inds = np.where(img_white == 255)
-    if len(mask_h_inds) == 0:
+    corners = np.array(
+        [[0, 0, 1], [cw, 0, 1], [cw, ch, 1], [0, ch, 1]], dtype=np.float64
+    )
+    pts = corners @ IM.T
+    bx0, by0 = np.floor(pts.min(axis=0)).astype(int)
+    bx1, by1 = np.ceil(pts.max(axis=0)).astype(int)
+    bx0, by0 = max(bx0, 0), max(by0, 0)
+    bx1, by1 = min(bx1, w), min(by1, h)
+    if bx1 - bx0 < 2 or by1 - by0 < 2:
         return frame
-    mask_h = int(np.max(mask_h_inds) - np.min(mask_h_inds))
-    mask_w = int(np.max(mask_w_inds) - np.min(mask_w_inds))
-    mask_size = int(np.sqrt(max(1, mask_h * mask_w)))
 
-    k = max(mask_size // 10, 10)
-    kernel = np.ones((k, k), np.uint8)
-    img_mask = cv2.erode(img_white, kernel, iterations=1)
-    kernel = np.ones((2, 2), np.uint8)
-    fake_diff = cv2.dilate(fake_diff, kernel, iterations=1)
+    mask_size = int(np.sqrt(max(1, (by1 - by0) * (bx1 - bx0))))
+    k_erode = max(mask_size // 10, 10)
+    k_blur = max(mask_size // 20, 5)
+    pad = k_erode + 2 * k_blur + 4
+    x0, y0 = max(bx0 - pad, 0), max(by0 - pad, 0)
+    x1, y1 = min(bx1 + pad, w), min(by1 + pad, h)
+    rw, rh = x1 - x0, y1 - y0
 
-    k = max(mask_size // 20, 5)
-    blur_size = (2 * k + 1, 2 * k + 1)
-    img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
-    fake_diff = cv2.GaussianBlur(fake_diff, (11, 11), 0)
+    IM_roi = IM.copy()
+    IM_roi[0, 2] -= x0
+    IM_roi[1, 2] -= y0
+    bgr_w = cv2.warpAffine(bgr_fake, IM_roi, (rw, rh), borderValue=0.0)
+    white = np.full((ch, cw), 255, dtype=np.float32)
+    white = cv2.warpAffine(white, IM_roi, (rw, rh), borderValue=0.0)
+    white[white > 20] = 255
+    if not (white == 255).any():
+        return frame
 
-    img_mask = (img_mask / 255.0).astype(np.float32)
-    img_mask = img_mask[:, :, None]
-    merged = img_mask * bgr_w + (1.0 - img_mask) * frame.astype(np.float32)
-    return merged.astype(np.uint8)
+    img_mask = cv2.erode(white, np.ones((k_erode, k_erode), np.uint8), iterations=1)
+    img_mask = cv2.GaussianBlur(img_mask, (2 * k_blur + 1, 2 * k_blur + 1), 0)
+    img_mask = (img_mask / 255.0).astype(np.float32)[:, :, None]
+
+    out = frame.copy()
+    roi = frame[y0:y1, x0:x1].astype(np.float32)
+    merged = img_mask * bgr_w.astype(np.float32) + (1.0 - img_mask) * roi
+    out[y0:y1, x0:x1] = merged.astype(np.uint8)
+    return out
 
 
 class HyperSwapModel(FaceSwapper):

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import cv2
 
 from face_swap import FaceSwapConfig, batch_swap, swap_image, swap_video
+from face_swap.core.io import imread_unicode, imwrite_unicode
 
 
 def main():
@@ -228,7 +229,7 @@ Examples:
                 # Image mode
                 print(f"Processing image: {args.target}")
                 result = swap_image(args.source, args.target, config)
-                cv2.imwrite(args.output, result)
+                imwrite_unicode(args.output, result)
                 print(f"Output saved to: {args.output}")
 
         else:
@@ -249,7 +250,7 @@ def run_webcam(source_path: str, camera_id: int, config: FaceSwapConfig):
     print(f"Starting webcam demo (Camera {camera_id})")
     print("Press 'q' in the video window to quit")
 
-    source = cv2.imread(source_path)
+    source = imread_unicode(source_path)
     if source is None:
         raise ValueError(f"Could not load source image: {source_path}")
 
@@ -423,7 +424,7 @@ def evaluate_main(argv: List[str]) -> None:
         print(f"Swapping ({args.quality}) ...", flush=True)
         out = swap_image(args.source, args.target, cfg)
         if args.output:
-            cv2.imwrite(args.output, out)
+            imwrite_unicode(args.output, out)
             result_path = args.output
             print(f"Wrote {args.output}", flush=True)
         else:
@@ -432,7 +433,7 @@ def evaluate_main(argv: List[str]) -> None:
 
             fd, result_path = tempfile.mkstemp(suffix=".jpg")
             os.close(fd)
-            cv2.imwrite(result_path, out)
+            imwrite_unicode(result_path, out)
 
     metrics = evaluate_swap(
         args.source,

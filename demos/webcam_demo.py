@@ -17,6 +17,7 @@ import numpy as np
 
 from face_swap import FaceSwapConfig, FaceSwapPipeline
 from face_swap.core.fast_video import FastVideoConfig
+from face_swap.core.io import imread_unicode, imwrite_unicode
 
 
 class WebcamDemo:
@@ -218,7 +219,7 @@ class WebcamDemo:
                     break
                 if key == ord("s"):
                     filename = f"screenshot_{screenshot_count:04d}.jpg"
-                    cv2.imwrite(filename, result)
+                    imwrite_unicode(filename, result)
                     print(f"Screenshot saved: {filename}")
                     screenshot_count += 1
                 elif key == ord("f"):
@@ -292,7 +293,7 @@ def main():
 
     args = parser.parse_args()
 
-    source_img = cv2.imread(args.source)
+    source_img = imread_unicode(args.source)
     if source_img is None:
         print(f"Error: Could not load source image: {args.source}")
         sys.exit(1)

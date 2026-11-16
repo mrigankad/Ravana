@@ -7,15 +7,84 @@ As per PRD Section 9.1, this provides simple high-level functions:
 - start_realtime_swap(source_img, camera_id, callback, config)
 """
 
+import contextlib
+import dataclasses
+import logging
+import os
+import shutil
+import subprocess
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Union
 
 import cv2
 
+from .core.io import imread_unicode, imwrite_unicode
 from .core.fast_video import FastVideoConfig
 from .core.types import AlignedFace, Embedding, FaceBBox, Frame, Landmarks, SwapResult
 from .pipeline import FaceSwapPipeline, PipelineConfig
+
+
+logger = logging.getLogger("face_swap.api")
+
+# ---------------------------------------------------------------------------
+# Pipeline cache: building a pipeline loads ~1 GB of weights, so reuse it.
+# ---------------------------------------------------------------------------
+_CACHE_SIZE = 2
+_cache: "OrderedDict[tuple, tuple]" = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _config_fingerprint(cfg: "FaceSwapConfig", mode: str) -> tuple:
+    """Hashable fingerprint of a config (+ image/video mode)."""
+    return (mode,) + tuple(
+        (f.name, getattr(cfg, f.name)) for f in dataclasses.fields(cfg)
+    )
+
+
+@contextlib.contextmanager
+def _pooled_pipeline(cfg: "FaceSwapConfig", pipeline_config, mode: str):
+    """Yield a cached, initialised pipeline; exclusive use via a per-entry lock."""
+    key = _config_fingerprint(cfg, mode)
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry is None:
+            entry = (FaceSwapPipeline(pipeline_config), threading.Lock())
+            _cache[key] = entry
+            while len(_cache) > _CACHE_SIZE:
+                _cache.popitem(last=False)
+        else:
+            _cache.move_to_end(key)
+    pipeline, lock = entry
+    with lock:
+        if hasattr(pipeline, "reset_temporal_state"):
+            pipeline.reset_temporal_state()
+        yield pipeline
+
+
+def clear_cache() -> None:
+    """Drop all cached pipelines (frees model memory)."""
+    with _cache_lock:
+        entries = list(_cache.values())
+        _cache.clear()
+    for pipeline, _ in entries:
+        try:
+            pipeline.cleanup()
+        except Exception:  # pragma: no cover - best effort
+            pass
+
+
+def _load_image(img: Union[str, "os.PathLike", Frame], role: str) -> Frame:
+    """Load an image path (unicode-safe) or pass an array through."""
+    if isinstance(img, (str, os.PathLike)):
+        path = os.fspath(img)
+        loaded = imread_unicode(path)
+        if loaded is None:
+            raise ValueError(f"Could not load {role} image: {path}")
+        return loaded
+    return img
 
 
 @dataclass
@@ -191,29 +260,16 @@ def swap_image(
         >>> cv2.imwrite("output.jpg", result)
     """
     # Load images if paths provided
-    if isinstance(source_img, str):
-        source_img = cv2.imread(source_img)
-        if source_img is None:
-            raise ValueError(f"Could not load source image: {source_img}")
+    source_img = _load_image(source_img, "source")
 
-    if isinstance(target_img, str):
-        target_img = cv2.imread(target_img)
-        if target_img is None:
-            raise ValueError(f"Could not load target image: {target_img}")
+    target_img = _load_image(target_img, "target")
 
     # Use default config if not provided
     cfg = config or FaceSwapConfig()
 
-    # Create pipeline
-    pipeline = FaceSwapPipeline(cfg.to_pipeline_config())
-
-    # Extract source embedding
-    source_embedding = pipeline.extract_source_embedding(source_img)
-
-    # Process target image
-    result = pipeline.process_frame(target_img, source_embedding)
-
-    return result
+    with _pooled_pipeline(cfg, cfg.to_pipeline_config(), "image") as pipeline:
+        source_embedding = pipeline.extract_source_embedding(source_img)
+        return pipeline.process_frame(target_img, source_embedding)
 
 
 def swap_video(
@@ -239,10 +295,7 @@ def swap_video(
         >>> swap_video("source.jpg", "input.mp4", "output.mp4")
     """
     # Load source image
-    if isinstance(source_img, str):
-        source_img = cv2.imread(source_img)
-        if source_img is None:
-            raise ValueError(f"Could not load source image: {source_img}")
+    source_img = _load_image(source_img, "source")
 
     # Use default config if not provided
     cfg = config or FaceSwapConfig()
@@ -259,26 +312,104 @@ def swap_video(
         if pipeline_config.video_flow_blend <= 0:
             pipeline_config.video_flow_blend = 0.25
 
-    # Create pipeline
-    pipeline = FaceSwapPipeline(pipeline_config)
+    with _pooled_pipeline(cfg, pipeline_config, "video") as pipeline:
+        source_embedding = pipeline.extract_source_embedding(source_img)
+        _run_video(
+            pipeline,
+            source_embedding,
+            input_video,
+            output_video,
+            progress_callback,
+        )
 
-    # Extract source embedding
-    source_embedding = pipeline.extract_source_embedding(source_img)
 
-    # Open video
+def build_ffmpeg_mux_cmd(
+    video_path: str,
+    audio_source: str,
+    output_path: str,
+    ffmpeg: str = "ffmpeg",
+) -> List[str]:
+    """ffmpeg command: re-encode the swapped video (H.264) and copy source audio."""
+    return [
+        ffmpeg,
+        "-y",
+        "-i",
+        video_path,
+        "-i",
+        audio_source,
+        "-map",
+        "0:v",
+        "-map",
+        "1:a?",
+        "-c:v",
+        "libx264",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        output_path,
+    ]
+
+
+def _mux_audio(silent_video: str, audio_source: str, output_video: str) -> bool:
+    """Remux audio from ``audio_source`` into the output; False if unavailable."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        logger.warning(
+            "ffmpeg not found on PATH: output video has no audio and uses mp4v."
+        )
+        return False
+    cmd = build_ffmpeg_mux_cmd(silent_video, audio_source, output_video, ffmpeg)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError as e:
+        logger.warning("ffmpeg could not be started (%s); output has no audio.", e)
+        return False
+    if proc.returncode != 0:
+        logger.warning(
+            "ffmpeg remux failed (code %s): %s",
+            proc.returncode,
+            (proc.stderr or "")[-300:],
+        )
+        return False
+    return True
+
+
+def _run_video(
+    pipeline,
+    source_embedding,
+    input_video: str,
+    output_video: str,
+    progress_callback: Optional[Callable[[int, int], None]],
+) -> None:
+    import tempfile
+
     cap = cv2.VideoCapture(input_video)
     if not cap.isOpened():
         raise ValueError(f"Could not open video: {input_video}")
 
-    # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if not fps or fps != fps or fps <= 0:
+        logger.warning("Video reports fps=%s; assuming 25.", fps)
+        fps = 25.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Create video writer
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(output_video, fourcc, fps, (width, height))
+    # Write to an ASCII temp path (cv2.VideoWriter is not unicode-safe on
+    # Windows), then remux audio / move to the real destination.
+    tmp_dir = tempfile.mkdtemp(prefix="ravana_")
+    tmp_video = os.path.join(tmp_dir, "video_noaudio.mp4")
+    out = cv2.VideoWriter(
+        tmp_video, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+    )
+    if not out.isOpened():
+        cap.release()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise ValueError(f"Could not open video writer for: {output_video}")
 
     try:
         frame_idx = 0
@@ -286,22 +417,22 @@ def swap_video(
             ret, frame = cap.read()
             if not ret:
                 break
-
-            # Process frame
             result = pipeline.process_video_frame(frame, source_embedding, frame_idx)
-
-            # Write output
             out.write(result)
-
-            # Update progress
             if progress_callback:
                 progress_callback(frame_idx, total_frames)
-
             frame_idx += 1
-
     finally:
         cap.release()
         out.release()
+
+    try:
+        out_dir = os.path.dirname(os.path.abspath(output_video))
+        os.makedirs(out_dir, exist_ok=True)
+        if not _mux_audio(tmp_video, input_video, output_video):
+            shutil.move(tmp_video, output_video)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def start_realtime_swap(
@@ -327,10 +458,7 @@ def start_realtime_swap(
         >>> start_realtime_swap("source.jpg", camera_id=0)
     """
     # Load source image
-    if isinstance(source_img, str):
-        source_img = cv2.imread(source_img)
-        if source_img is None:
-            raise ValueError(f"Could not load source image: {source_img}")
+    source_img = _load_image(source_img, "source")
 
     # Use realtime path by default for webcam
     cfg = config or FaceSwapConfig(
@@ -447,10 +575,7 @@ def batch_swap(
     from pathlib import Path
 
     # Load source image
-    if isinstance(source_img, str):
-        source_img = cv2.imread(source_img)
-        if source_img is None:
-            raise ValueError(f"Could not load source image: {source_img}")
+    source_img = _load_image(source_img, "source")
 
     # Use default config
     cfg = config or FaceSwapConfig()
@@ -467,7 +592,7 @@ def batch_swap(
 
     for target_path in target_paths:
         # Load target
-        target_img = cv2.imread(target_path)
+        target_img = imread_unicode(target_path)
         if target_img is None:
             print(f"Warning: Could not load {target_path}, skipping")
             continue
@@ -477,7 +602,7 @@ def batch_swap(
 
         # Save
         output_file = output_path / f"swapped_{Path(target_path).name}"
-        cv2.imwrite(str(output_file), result)
+        imwrite_unicode(output_file, result)
         output_files.append(str(output_file))
 
         print(f"Processed: {target_path} -> {output_file}")
@@ -491,6 +616,8 @@ __all__ = [
     # High-level API
     "swap_image",
     "swap_video",
+    "clear_cache",
+    "build_ffmpeg_mux_cmd",
     "start_realtime_swap",
     "batch_swap",
     "FaceSwapConfig",

@@ -7,7 +7,14 @@ A production-ready SDK for face swapping on images, pre-recorded video, and live
 __version__ = "0.3.3"
 __author__ = "Face Swap Team"
 
-from .api import FaceSwapConfig, batch_swap, start_realtime_swap, swap_image, swap_video
+from .api import (
+    FaceSwapConfig,
+    batch_swap,
+    clear_cache,
+    start_realtime_swap,
+    swap_image,
+    swap_video,
+)
 from .audio import AudioProcessor
 from .core.config_loader import load_config, load_face_swap_config, load_pipeline_config
 from .core.metrics import MetricsAnalyzer, SwapMetrics, evaluate_swap
@@ -73,6 +80,7 @@ __all__ = [
     # High-level API
     "swap_image",
     "swap_video",
+    "clear_cache",
     "start_realtime_swap",
     "batch_swap",
     "FaceSwapConfig",

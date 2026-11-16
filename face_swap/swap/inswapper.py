@@ -193,42 +193,10 @@ class InSwapperModel(FaceSwapper):
         aimg: np.ndarray,
         M: np.ndarray,
     ) -> Frame:
-        """Official InsightFace paste-back (erode + Gaussian soft mask)."""
-        fake_diff = np.abs(bgr_fake.astype(np.float32) - aimg.astype(np.float32)).mean(
-            axis=2
-        )
-        fake_diff[:2, :] = 0
-        fake_diff[-2:, :] = 0
-        fake_diff[:, :2] = 0
-        fake_diff[:, -2:] = 0
+        """InsightFace-style paste-back (erode + Gaussian soft mask), ROI-only."""
+        from .hyperswap import _paste_back_insightface
 
-        IM = cv2.invertAffineTransform(M)
-        h, w = frame.shape[:2]
-        img_white = np.full((aimg.shape[0], aimg.shape[1]), 255, dtype=np.float32)
-        warped = cv2.warpAffine(bgr_fake, IM, (w, h), borderValue=0.0)
-        img_white = cv2.warpAffine(img_white, IM, (w, h), borderValue=0.0)
-
-        img_white[img_white > 20] = 255
-        img_mask = img_white
-        mask_h_inds, mask_w_inds = np.where(img_mask == 255)
-        if len(mask_h_inds) == 0:
-            return frame
-
-        mask_h = int(np.max(mask_h_inds) - np.min(mask_h_inds))
-        mask_w = int(np.max(mask_w_inds) - np.min(mask_w_inds))
-        mask_size = int(np.sqrt(mask_h * mask_w))
-        k = max(mask_size // 10, 10)
-        img_mask = cv2.erode(img_mask, np.ones((k, k), np.uint8), iterations=1)
-        k = max(mask_size // 20, 5)
-        blur_size = tuple(2 * i + 1 for i in (k, k))
-        img_mask = cv2.GaussianBlur(img_mask, blur_size, 0)
-        img_mask = (img_mask / 255.0).astype(np.float32)
-        img_mask = img_mask[:, :, None]
-
-        merged = img_mask * warped.astype(np.float32) + (1.0 - img_mask) * frame.astype(
-            np.float32
-        )
-        return merged.astype(np.uint8)
+        return _paste_back_insightface(frame, bgr_fake, aimg, M)
 
     def get_mask(self, swapped_face: np.ndarray) -> np.ndarray:
         h, w = swapped_face.shape[:2]

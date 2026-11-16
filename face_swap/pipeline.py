@@ -60,6 +60,7 @@ from .masking import apply_occlusion_blend
 from .swap import FaceSwapper, InSwapperModel
 from .swap.hyperswap import HyperSwapModel
 from .temporal import OpticalFlowConfig, OpticalFlowSmoother, TemporalSmoother
+from .temporal.one_euro import OneEuroTracks
 from .temporal.smoother import ema_smooth_insight_faces
 from .watermark import InvisibleWatermarker, WatermarkConfig
 
@@ -133,15 +134,18 @@ class FaceSwapPipeline:
     def __init__(self, config: Optional[PipelineConfig] = None):
         self.config = config or PipelineConfig()
 
-        self.detector: Optional[FaceDetector] = None
-        self.landmark_detector: Optional[LandmarkDetector] = None
-        self.embedder: Optional[IdentityEmbedder] = None
-        self.aligner: Optional[FaceAligner] = None
+        # Modular-path components are created lazily (see ``_ensure_modular``);
+        # the native InsightFace path never needs them.
+        self._detector: Optional[FaceDetector] = None
+        self._landmark_detector: Optional[LandmarkDetector] = None
+        self._embedder: Optional[IdentityEmbedder] = None
+        self._aligner: Optional[FaceAligner] = None
         self.swapper: Optional[FaceSwapper] = None
         self.blender: Optional[FaceBlender] = None
         self.temporal_smoother: Optional[TemporalSmoother] = None
         self._flow_smoother: Optional[OpticalFlowSmoother] = None
         self._smooth_faces_prev: list = []
+        self._kps_tracks = OneEuroTracks()
 
         self.quality_validator: Optional[QualityValidator] = None
         self.profiler: Optional[PipelineProfiler] = None
@@ -184,6 +188,46 @@ class FaceSwapPipeline:
         self._face_app = app
         return app
 
+    @property
+    def detector(self) -> Optional[FaceDetector]:
+        if self._detector is None and self._initialized:
+            self._ensure_modular()
+        return self._detector
+
+    @property
+    def landmark_detector(self) -> Optional[LandmarkDetector]:
+        if self._landmark_detector is None and self._initialized:
+            self._ensure_modular()
+        return self._landmark_detector
+
+    @property
+    def aligner(self) -> Optional[FaceAligner]:
+        if self._aligner is None and self._initialized:
+            self._ensure_modular()
+        return self._aligner
+
+    @property
+    def embedder(self) -> Optional[IdentityEmbedder]:
+        if self._embedder is None and self._initialized:
+            self._ensure_modular()
+        return self._embedder
+
+    def _ensure_modular(self) -> None:
+        """Create detector/landmark/aligner/embedder on first modular-path use."""
+        if self._detector is not None:
+            return
+        cfg = self.config
+        raw_detector = RetinaFaceDetector(
+            confidence_threshold=cfg.det_confidence_threshold, device=cfg.device
+        )
+        if cfg.async_detection and self._async_detector is None:
+            self._async_detector = AsyncFaceDetector(raw_detector)
+            self._async_detector.start()
+        self._detector = raw_detector
+        self._landmark_detector = InsightFaceLandmarkDetector(device=cfg.device)
+        self._aligner = FaceAligner(crop_size=(cfg.crop_size, cfg.crop_size))
+        self._embedder = ArcFaceEmbedder(device=cfg.device)
+
     def initialize(self) -> None:
         """Initialize all pipeline components."""
         if self._initialized:
@@ -192,18 +236,6 @@ class FaceSwapPipeline:
         cfg = self.config
         # Must set before _ensure_face_app() so allowed_modules / det_size apply
         self._fast = cfg.fast_video
-
-        raw_detector = RetinaFaceDetector(
-            confidence_threshold=cfg.det_confidence_threshold, device=cfg.device
-        )
-        if cfg.async_detection:
-            self._async_detector = AsyncFaceDetector(raw_detector)
-            self._async_detector.start()
-        self.detector = raw_detector
-
-        self.landmark_detector = InsightFaceLandmarkDetector(device=cfg.device)
-        self.aligner = FaceAligner(crop_size=(cfg.crop_size, cfg.crop_size))
-        self.embedder = ArcFaceEmbedder(device=cfg.device)
 
         if cfg.swap_model == "inswapper":
             self.swapper = InSwapperModel(
@@ -329,6 +361,20 @@ class FaceSwapPipeline:
                 self._xseg = None
 
         self._initialized = True
+        # Eagerly build modular parts only when the native path is not used.
+        if not self._native_inswapper_enabled():
+            self._ensure_modular()
+
+    def reset_temporal_state(self) -> None:
+        """Clear per-video state (keeps loaded models); call between clips."""
+        if self._flow_smoother is not None:
+            self._flow_smoother.reset()
+        self._smooth_faces_prev = []
+        self._kps_tracks.reset()
+        self._cached_faces = []
+        self._cache_frame_idx = -999
+        if self.temporal_smoother is not None:
+            self.temporal_smoother.clear_cache()
 
     def cleanup(self) -> None:
         if self._async_detector is not None:
@@ -337,6 +383,7 @@ class FaceSwapPipeline:
         if self._flow_smoother is not None:
             self._flow_smoother.reset()
         self._smooth_faces_prev = []
+        self._kps_tracks.reset()
         self._cached_faces = []
         self._cache_frame_idx = -999
         if self.temporal_smoother is not None:
@@ -519,6 +566,23 @@ class FaceSwapPipeline:
 
         return self._process_frame_modular(frame, source_embedding, return_intermediate)
 
+    @staticmethod
+    def _faces_roi(faces, shape, pad: float = 0.35):
+        """Padded union bbox (x0, y0, x1, y1) of detected faces, or None."""
+        if not faces:
+            return None
+        boxes = np.asarray([np.asarray(f.bbox, dtype=np.float32) for f in faces])
+        x0, y0 = boxes[:, 0].min(), boxes[:, 1].min()
+        x1, y1 = boxes[:, 2].max(), boxes[:, 3].max()
+        pw, ph = (x1 - x0) * pad, (y1 - y0) * pad
+        h, w = shape[:2]
+        return (
+            int(max(0, x0 - pw)),
+            int(max(0, y0 - ph)),
+            int(min(w, x1 + pw)),
+            int(min(h, y1 + ph)),
+        )
+
     def process_video_frame(
         self,
         frame: Frame,
@@ -537,6 +601,7 @@ class FaceSwapPipeline:
                     faces,
                     self._smooth_faces_prev,
                     alpha=float(self.config.video_face_ema_alpha),
+                    kps_tracks=self._kps_tracks,
                 )
                 self._smooth_faces_prev = list(faces)
             else:
@@ -546,7 +611,13 @@ class FaceSwapPipeline:
 
             if self._flow_smoother is not None:
                 try:
-                    output = self._flow_smoother.smooth_frame(output, frame)
+                    roi = self._faces_roi(faces, frame.shape)
+                    if roi is None:
+                        self._flow_smoother.observe(output, frame)
+                    else:
+                        output = self._flow_smoother.smooth_frame_roi(
+                            output, frame, roi
+                        )
                 except Exception as e:
                     logger.debug("Optical flow temporal smooth skipped: %s", e)
 

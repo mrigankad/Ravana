@@ -33,6 +33,7 @@ _collect_pkgs = (
 
 datas = [
     (str(ROOT / "docs" / "assets" / "mascot.ico"), "docs/assets"),
+    (str(ROOT / "demos" / "gui_app" / "assets"), "demos/gui_app/assets"),
 ]
 binaries = []
 hiddenimports = [
@@ -44,6 +45,7 @@ hiddenimports = [
     "demos.gui_app.theme",
     "demos.gui_app.config",
     "demos.gui_app.paths",
+    "demos.gui_app.widgets",
     "face_swap",
     "face_swap.api",
     "face_swap.pipeline",

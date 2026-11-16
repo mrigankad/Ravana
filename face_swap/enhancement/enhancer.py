@@ -598,14 +598,18 @@ class OpenCVEnhancer(FaceEnhancer):
 
 
 def _tile_starts(length: int, tile: int, overlap: int) -> list:
-    """Start indices so tiles of ``tile`` cover ``length`` with ``overlap``."""
+    """Sorted, unique start indices so tiles of ``tile`` cover ``length``.
+
+    Uses the minimum tile count that honours ``overlap`` and spaces the starts
+    evenly, so the last tile ends exactly at ``length`` without a near-duplicate
+    trailing tile.
+    """
     if length <= tile:
         return [0]
-    step = max(1, tile - overlap)
-    starts = list(range(0, length - tile + 1, step))
+    step = max(1, tile - max(0, overlap))
+    n = int(np.ceil((length - tile) / step)) + 1
     last = length - tile
-    if starts[-1] != last:
-        starts.append(last)
+    starts = sorted({int(round(i * last / (n - 1))) for i in range(n)})
     return starts
 
 

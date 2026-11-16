@@ -1,4 +1,9 @@
-"""Ravana PySide6 main window."""
+"""Ravana 2.0 main window (light, Inter, responsive).
+
+Layout mirrors the Paper design "Ravana — Redesign" / 01 Desktop app:
+title bar with tabs, a context rail (Swap / Batch / Live / Models), and a stage
+with a compare canvas, live scores and one primary action.
+"""
 
 from __future__ import annotations
 
@@ -9,30 +14,42 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSettings, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox,
+    QButtonGroup,
     QFileDialog,
-    QFormLayout,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
+    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from demos.gui_app.config import VIDEO_EXTS, build_config
-from demos.gui_app.paths import models_dir, resource_path
-from demos.gui_app.preview import IMAGE_EXTS, PreviewStage, load_path_pixmap
+from demos.gui_app.paths import models_dir
+from demos.gui_app.preview import IMAGE_EXTS, bgr_to_qpixmap, load_path_pixmap
+from demos.gui_app.theme import COLORS
+from demos.gui_app.widgets import (
+    Banner,
+    CompareCanvas,
+    DropCard,
+    Metric,
+    Segmented,
+    SelectRow,
+    app_icon,
+    eyebrow,
+    svg_icon,
+    svg_pixmap,
+)
 from demos.gui_app.workers import (
     BatchWorker,
     ModelsDownloadWorker,
@@ -42,62 +59,71 @@ from demos.gui_app.workers import (
     missing_preset_models,
 )
 
-VERSION = "0.3.4"
+VERSION = "0.4.0"
 
-
-def _mascot_icon_path() -> Path:
-    root = resource_path("docs", "assets")
-    ico = root / "mascot.ico"
-    if ico.is_file():
-        return ico
-    png = root / "mascot.png"
-    return png
-
-
-def load_mascot_pixmap(max_side: int = 48) -> QPixmap:
-    path = _mascot_icon_path()
-    if not path.is_file():
-        return QPixmap()
-    pix = QPixmap(str(path))
-    if pix.isNull():
-        return QPixmap()
-    return pix.scaled(
-        max_side,
-        max_side,
-        Qt.AspectRatioMode.KeepAspectRatio,
-        Qt.TransformationMode.SmoothTransformation,
-    )
+QUALITY_ITEMS = [("Fast", "low"), ("Medium", "medium"), ("High", "high"), ("Seamless", "seamless")]
+QUALITY_HELP = {
+    "low": "Fastest path, restore off. Good for previews and CPU-only machines.",
+    "medium": "InSwapper with light restore. A good default for video.",
+    "high": "InSwapper with GFPGAN restore and occlusion masks.",
+    "seamless": "HyperSwap 256 with GFPGAN, XSeg occlusion, lighting match and 1024 pixel boost.",
+}
+RESTORE_ITEMS = [("Preset", "default"), ("GFPGAN", "gfpgan"), ("GPEN", "gpen"),
+                 ("RestoreFormer++", "restoreformer"), ("CodeFormer", "codeformer"),
+                 ("OpenCV (fast)", "opencv")]
+BOOST_ITEMS = [("Preset", "default"), ("512", "512"), ("1024", "1024"), ("Off", "0")]
+FACES_ITEMS = [("Largest", "largest"), ("All", "all"), ("First", "first"), ("Pose match", "pose")]
+DEVICE_ITEMS = [("Auto", "auto"), ("NVIDIA (CUDA)", "cuda"), ("DirectML", "dml"), ("CPU", "cpu")]
 
 
 def load_app_icon():
-    """Windows taskbar/title-bar icon (prefers .ico)."""
-    from PySide6.QtGui import QIcon
-
-    path = _mascot_icon_path()
-    if not path.is_file():
-        return QIcon()
-    return QIcon(str(path))
+    """Kept for demos/gui.py compatibility."""
+    return app_icon()
 
 
-def _reveal_in_explorer(path: str) -> None:
-    p = Path(path)
+def detect_device_label() -> str:
+    """Human label for the best available ONNX Runtime provider."""
+    try:
+        import onnxruntime as ort
+
+        providers = ort.get_available_providers()
+    except Exception:  # noqa: BLE001
+        return "CPU"
+    if "TensorrtExecutionProvider" in providers:
+        return "TensorRT"
+    if "CUDAExecutionProvider" in providers:
+        return "CUDA"
+    if "DmlExecutionProvider" in providers:
+        return "DirectML"
+    if "CoreMLExecutionProvider" in providers:
+        return "CoreML"
+    return "CPU only"
+
+
+def _open_folder(path: str) -> None:
     if sys.platform == "win32":
-        subprocess.run(["explorer", "/select,", str(p)], check=False)
+        os.startfile(path)  # noqa: S606
     elif sys.platform == "darwin":
-        subprocess.run(["open", "-R", str(p)], check=False)
+        subprocess.run(["open", path], check=False)
     else:
-        subprocess.run(["xdg-open", str(p.parent)], check=False)
+        subprocess.run(["xdg-open", path], check=False)
+
+
+def _reveal(path: str) -> None:
+    if sys.platform == "win32":
+        subprocess.run(["explorer", "/select,", str(Path(path))], check=False)
+    else:
+        _open_folder(str(Path(path).parent))
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle(f"Ravana {VERSION}")
-        self.resize(1280, 840)
-        self.setMinimumSize(1000, 680)
-        icon = load_app_icon()
-        if not icon.isNull():
-            self.setWindowIcon(icon)
+        self.setWindowTitle("Ravana")
+        self.setWindowIcon(app_icon())
+        self.resize(1440, 900)
+        self.setMinimumSize(780, 560)
+        self._settings = QSettings("Ravana", "Ravana")
 
         self._source_path: Optional[str] = None
         self._target_path: Optional[str] = None
@@ -109,811 +135,826 @@ class MainWindow(QMainWindow):
         self._models_worker: Optional[ModelsDownloadWorker] = None
         self._batch_output_dir: Optional[str] = None
         self._last_dir = str(Path.home())
-        self._models_prompted = False
+        self._pending_after_consent = None
+        self._compact = None
 
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        root.setContentsMargins(14, 10, 14, 12)
-        root.setSpacing(10)
-
-        self._build_menu()
-        root.addLayout(self._build_header())
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._build_title_bar())
 
         body = QHBoxLayout()
-        body.setSpacing(12)
-        body.addWidget(self._build_left_rail(), stretch=0)
-        self.preview = PreviewStage()
-        self.preview.source_dropped.connect(self._apply_source)
-        self.preview.target_dropped.connect(self._apply_target)
-        body.addWidget(self.preview, stretch=1)
-        root.addLayout(body, stretch=1)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(self._build_rail())
+        body.addWidget(self._build_stage(), 1)
+        root.addLayout(body, 1)
 
-        root.addWidget(self._build_score_strip())
-        root.addLayout(self._build_actions())
-        root.addLayout(self._build_footer())
+        self._build_shortcuts()
+        self._apply_responsive(self.width())
+        QTimer.singleShot(500, self._check_models)
 
-        QTimer.singleShot(600, self._maybe_prompt_models)
+    # ================================================================ title bar
+    def _build_title_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("titleBar")
+        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bar.setFixedHeight(56)
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(20, 0, 20, 0)
+        row.setSpacing(12)
 
-    def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("&File")
-        open_src = QAction("Open &source…", self)
-        open_src.setShortcut(QKeySequence("Ctrl+O"))
-        open_src.triggered.connect(self._select_source)
-        open_tgt = QAction("Open &target…", self)
-        open_tgt.setShortcut(QKeySequence("Ctrl+T"))
-        open_tgt.triggered.connect(self._select_target)
-        save = QAction("&Save result as…", self)
-        save.setShortcut(QKeySequence("Ctrl+S"))
-        save.triggered.connect(self._save_as)
-        reveal = QAction("Reveal result in folder", self)
-        reveal.triggered.connect(self._reveal_result)
-        quit_act = QAction("&Quit", self)
-        quit_act.setShortcut(QKeySequence("Ctrl+Q"))
-        quit_act.triggered.connect(self.close)
-        file_menu.addAction(open_src)
-        file_menu.addAction(open_tgt)
-        file_menu.addSeparator()
-        file_menu.addAction(save)
-        file_menu.addAction(reveal)
-        file_menu.addSeparator()
-        file_menu.addAction(quit_act)
+        mark = QLabel()
+        mark.setPixmap(svg_pixmap("mark.svg", QSize(64, 18)))
+        word = QLabel("Ravana")
+        word.setObjectName("wordmark")
+        row.addWidget(mark)
+        row.addWidget(word)
+        row.addSpacing(16)
 
-        run_menu = self.menuBar().addMenu("&Run")
-        swap = QAction("Start face &swap", self)
-        swap.setShortcut(QKeySequence("Ctrl+Return"))
-        swap.triggered.connect(self._start_swap)
-        score = QAction("S&core result", self)
-        score.setShortcut(QKeySequence("Ctrl+E"))
-        score.triggered.connect(self._score_result)
-        cam = QAction("Toggle &webcam", self)
-        cam.setShortcut(QKeySequence("Ctrl+W"))
-        cam.triggered.connect(self._toggle_webcam)
-        batch = QAction("Run &batch", self)
-        batch.setShortcut(QKeySequence("Ctrl+B"))
-        batch.triggered.connect(self._start_batch)
-        run_menu.addAction(swap)
-        run_menu.addAction(score)
-        run_menu.addAction(cam)
-        run_menu.addAction(batch)
-
-        help_menu = self.menuBar().addMenu("&Help")
-        download = QAction("&Download models…", self)
-        download.triggered.connect(lambda: self._start_model_download(prompt=True))
-        about = QAction("&About Ravana", self)
-        about.triggered.connect(self._about)
-        help_menu.addAction(download)
-        help_menu.addSeparator()
-        help_menu.addAction(about)
-
-    def _build_header(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        mascot = QLabel()
-        pix = load_mascot_pixmap(52)
-        if not pix.isNull():
-            mascot.setPixmap(pix)
-        title = QLabel("Ravana")
-        title.setStyleSheet("font-size: 22px; font-weight: 700;")
-        tag = QLabel("Face-swap SDK")
-        tag.setObjectName("muted")
-        ver = QLabel(f"v{VERSION}")
-        ver.setObjectName("muted")
-        row.addWidget(mascot)
-        row.addWidget(title)
-        row.addWidget(tag)
+        self._nav = QButtonGroup(self)
+        self._nav.setExclusive(True)
+        for i, (label, icon) in enumerate(
+            [("Swap", "swap.svg"), ("Batch", "batch.svg"), ("Live", "live.svg"), ("Models", "models.svg")]
+        ):
+            b = QPushButton(label)
+            b.setObjectName("navTab")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setIcon(svg_icon(icon, 16, COLORS["muted"]))
+            b.setIconSize(QSize(16, 16))
+            b.clicked.connect(lambda _=False, idx=i: self._go(idx))
+            self._nav.addButton(b, i)
+            row.addWidget(b)
+        self._nav.button(0).setChecked(True)
         row.addStretch(1)
+
+        chip = QFrame()
+        chip.setObjectName("chip")
+        cl = QHBoxLayout(chip)
+        cl.setContentsMargins(10, 5, 10, 5)
+        cl.setSpacing(8)
+        dot = QLabel()
+        dot.setFixedSize(7, 7)
+        dev = detect_device_label()
+        dot.setStyleSheet(
+            f"background: {COLORS['brass'] if dev != 'CPU only' else COLORS['faint']}; border-radius: 3px;"
+        )
+        self._device_label = QLabel(dev)
+        self._device_label.setObjectName("label")
+        self._device_label.setToolTip("Best ONNX Runtime provider found on this machine")
+        cl.addWidget(dot)
+        cl.addWidget(self._device_label)
+        chip.setFixedHeight(30)
+        row.addWidget(chip, 0, Qt.AlignmentFlag.AlignVCenter)
+        ver = QLabel(f"v{VERSION}")
+        ver.setObjectName("version")
         row.addWidget(ver)
-        return row
+        return bar
 
-    def _build_left_rail(self) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFixedWidth(320)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    def _go(self, idx: int) -> None:
+        self._nav.button(idx).setChecked(True)
+        self._rail_stack.setCurrentIndex(idx)
+        self._refresh_empty_state()
 
-        rail = QWidget()
-        layout = QVBoxLayout(rail)
-        layout.setContentsMargins(0, 0, 6, 0)
-        layout.setSpacing(8)
+    def _refresh_empty_state(self) -> None:
+        """Pick Dasha's pose and copy for the canvas when it has nothing to show."""
+        idx = self._rail_stack.currentIndex() if hasattr(self, "_rail_stack") else 0
+        if idx == 1:
+            n = self.batch_list.count()
+            self.canvas.set_empty_state(
+                "batch", "Queue targets to swap in one go" if not n else f"{n} in the queue",
+                "Add files or a whole folder. Results land in batch_out.")
+        elif idx == 2:
+            self.canvas.set_empty_state("live", "Your camera, live", "Start the camera to swap in real time.")
+        elif idx == 3 or self._models_missing:
+            self.canvas.set_empty_state("offline", "Models are not downloaded yet",
+                                        "Download the seamless preset once. It stays on this machine.")
+        else:
+            self.canvas.set_empty_state("idle", "Drop a source face and a target to begin",
+                                        "Images or video. Nothing leaves this machine.")
 
-        brand = QLabel()
-        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand_pix = load_mascot_pixmap(110)
-        if not brand_pix.isNull():
-            brand.setPixmap(brand_pix)
-        layout.addWidget(brand)
+    # ================================================================ rail
+    def _build_rail(self) -> QWidget:
+        self._rail = QWidget()
+        self._rail.setObjectName("rail")
+        self._rail.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._rail.setFixedWidth(320)
+        outer = QVBoxLayout(self._rail)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._rail_stack = QStackedWidget()
+        for page in (self._swap_page(), self._batch_page(), self._live_page(), self._models_page()):
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setWidget(page)
+            self._rail_stack.addWidget(scroll)
+        outer.addWidget(self._rail_stack)
+        return self._rail
 
-        files = QGroupBox("Files")
-        fl = QVBoxLayout(files)
-        fl.setSpacing(6)
+    def _page(self) -> tuple[QWidget, QVBoxLayout]:
+        w = QWidget()
+        col = QVBoxLayout(w)
+        col.setContentsMargins(20, 24, 20, 20)
+        col.setSpacing(28)
+        return w, col
 
-        self.source_thumb = QLabel("Source preview")
-        self.source_thumb.setObjectName("thumb")
-        self.source_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.source_btn = QPushButton("Select source image")
-        self.source_btn.clicked.connect(self._select_source)
-        self.source_name = QLabel("No source — drag onto Source pane")
-        self.source_name.setObjectName("muted")
-        self.source_name.setWordWrap(True)
+    def _section(self, title: str, *widgets: QWidget, spacing: int = 12) -> QWidget:
+        box = QWidget()
+        col = QVBoxLayout(box)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(spacing)
+        col.addWidget(eyebrow(title))
+        for w in widgets:
+            col.addWidget(w)
+        return box
 
-        self.target_thumb = QLabel("Target preview")
-        self.target_thumb.setObjectName("thumb")
-        self.target_thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.target_btn = QPushButton("Select target image/video")
-        self.target_btn.clicked.connect(self._select_target)
-        self.target_name = QLabel("No target — drag onto Target pane")
-        self.target_name.setObjectName("muted")
-        self.target_name.setWordWrap(True)
+    def _primary(self, text: str, hint: str = "") -> QPushButton:
+        b = QPushButton(text + (f"    {hint}" if hint else ""))
+        b.setObjectName("primary")
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setMinimumHeight(48)
+        return b
 
-        fl.addWidget(self.source_thumb)
-        fl.addWidget(self.source_btn)
-        fl.addWidget(self.source_name)
-        fl.addSpacing(4)
-        fl.addWidget(self.target_thumb)
-        fl.addWidget(self.target_btn)
-        fl.addWidget(self.target_name)
-        layout.addWidget(files)
+    # ---------------------------------------------------------- swap page
+    def _swap_page(self) -> QWidget:
+        page, col = self._page()
+        cards = QWidget()
+        cr = QHBoxLayout(cards)
+        cr.setContentsMargins(0, 0, 0, 0)
+        cr.setSpacing(10)
+        self.source_card = DropCard("Source face", "One clear face", images=True)
+        self.target_card = DropCard("Target", "Image or video", images=True, videos=True)
+        self.source_card.clicked.connect(self._select_source)
+        self.target_card.clicked.connect(self._select_target)
+        self.source_card.dropped.connect(self._apply_source)
+        self.target_card.dropped.connect(self._apply_target)
+        cr.addWidget(self.source_card)
+        cr.addWidget(self.target_card)
+        col.addWidget(self._section("Inputs", cards))
 
-        settings = QGroupBox("Settings")
-        form = QFormLayout(settings)
-        form.setSpacing(8)
+        self.quality = Segmented(QUALITY_ITEMS, "seamless", fill=True)
+        self.quality_help = QLabel(QUALITY_HELP["seamless"])
+        self.quality_help.setObjectName("muted")
+        self.quality_help.setWordWrap(True)
+        self.quality.changed.connect(lambda v: self.quality_help.setText(QUALITY_HELP[v]))
+        col.addWidget(self._section("Quality", self.quality, self.quality_help))
 
-        self.quality = QComboBox()
-        self.quality.addItem("Fast", "low")
-        self.quality.addItem("Balanced", "medium")
-        self.quality.addItem("Quality", "high")
-        self.quality.addItem("Seamless", "seamless")
-        self.quality.setCurrentIndex(3)  # seamless default
+        tune = QWidget()
+        tl = QVBoxLayout(tune)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
+        self.restore = SelectRow("Restore", RESTORE_ITEMS, "default")
+        self.boost = SelectRow("Pixel boost", BOOST_ITEMS, "default")
+        self.faces = SelectRow("Faces", FACES_ITEMS, "largest")
+        self.device = SelectRow("Device", DEVICE_ITEMS, "auto", last=True)
+        for r in (self.restore, self.boost, self.faces, self.device):
+            tl.addWidget(r)
+        col.addWidget(self._section("Fine tune", tune, spacing=4))
+        col.addStretch(1)
 
-        self.device = QComboBox()
-        self.device.addItem("Auto", "auto")
-        self.device.addItem("AMD (DirectML)", "dml")
-        self.device.addItem("GPU (CUDA)", "cuda")
-        self.device.addItem("CPU", "cpu")
+        self.swap_btn = self._primary("Swap face", "Ctrl ↵")
+        self.swap_btn.clicked.connect(self._start_swap)
+        note = QLabel("Use only with consent. Results can be watermarked.")
+        note.setObjectName("muted")
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setWordWrap(True)
+        self._consent_note = note
+        col.addWidget(self.swap_btn)
+        col.addWidget(note)
+        col.setSpacing(24)
+        return page
 
-        self.enhance = QComboBox()
-        for label, val in [
-            ("Preset", "default"),
-            ("GFPGAN", "gfpgan"),
-            ("GPEN", "gpen"),
-            ("RF++", "restoreformer"),
-            ("CodeFormer", "codeformer"),
-            ("OpenCV", "opencv"),
-        ]:
-            self.enhance.addItem(label, val)
-
-        self.pixel_boost = QComboBox()
-        for label, val in [
-            ("Preset", "default"),
-            ("512", "512"),
-            ("1024", "1024"),
-            ("Off", "0"),
-        ]:
-            self.pixel_boost.addItem(label, val)
-
-        self.face_select = QComboBox()
-        for label, val in [
-            ("All", "all"),
-            ("Largest", "largest"),
-            ("First", "first"),
-            ("Pose match", "pose"),
-        ]:
-            self.face_select.addItem(label, val)
-
-        form.addRow("Quality", self.quality)
-        form.addRow("Device", self.device)
-        form.addRow("Restore", self.enhance)
-        form.addRow("Pixel boost", self.pixel_boost)
-        form.addRow("Target face", self.face_select)
-        layout.addWidget(settings)
-
-        live = QGroupBox("Webcam")
-        live_form = QFormLayout(live)
-        self.camera_id = QSpinBox()
-        self.camera_id.setRange(0, 8)
-        self.camera_id.setValue(0)
-        self.detect_every = QSpinBox()
-        self.detect_every.setRange(1, 10)
-        self.detect_every.setValue(3)
-        self.detect_every.setToolTip("Detect faces every N frames (higher = faster)")
-        live_form.addRow("Camera ID", self.camera_id)
-        live_form.addRow("Detect every N", self.detect_every)
-        layout.addWidget(live)
-
-        batch = QGroupBox("Batch")
-        bl = QVBoxLayout(batch)
+    # ---------------------------------------------------------- batch page
+    def _batch_page(self) -> QWidget:
+        page, col = self._page()
         self.batch_list = QListWidget()
-        self.batch_list.setMinimumHeight(100)
         self.batch_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.batch_list.setToolTip("Targets to process with the current source face")
-        bl.addWidget(self.batch_list)
+        self.batch_list.setMinimumHeight(220)
+        self.batch_list.itemDoubleClicked.connect(self._batch_open_item)
+        btns = QWidget()
+        br = QHBoxLayout(btns)
+        br.setContentsMargins(0, 0, 0, 0)
+        br.setSpacing(6)
+        for text, icon, slot in (("Files", "add-file.svg", self._batch_add_files),
+                                 ("Folder", "add-folder.svg", self._batch_add_folder),
+                                 ("Remove", "trash.svg", self._batch_remove_selected),
+                                 ("Clear", "close.svg", self._batch_clear)):
+            icon_only = text in ("Remove", "Clear")
+            b = QPushButton("" if icon_only else text)
+            b.setToolTip(text)
+            b.setIcon(svg_icon(icon, 16))
+            b.setIconSize(QSize(16, 16))
+            if icon_only:
+                b.setFixedWidth(40)
+            else:
+                b.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            b.clicked.connect(slot)
+            br.addWidget(b)
+        hint = QLabel("Uses the source face from the Swap tab and its quality settings. "
+                      "Double-click a finished row to open it.")
+        hint.setObjectName("muted")
+        hint.setWordWrap(True)
+        col.addWidget(self._section("Queue", self.batch_list, btns, hint))
 
-        batch_btns = QHBoxLayout()
-        add_files = QPushButton("Add files")
-        add_files.clicked.connect(self._batch_add_files)
-        add_folder = QPushButton("Add folder")
-        add_folder.clicked.connect(self._batch_add_folder)
-        remove_sel = QPushButton("Remove")
-        remove_sel.clicked.connect(self._batch_remove_selected)
-        clear_batch = QPushButton("Clear")
-        clear_batch.clicked.connect(self.batch_list.clear)
-        batch_btns.addWidget(add_files)
-        batch_btns.addWidget(add_folder)
-        batch_btns.addWidget(remove_sel)
-        batch_btns.addWidget(clear_batch)
-        bl.addLayout(batch_btns)
-
-        out_row = QHBoxLayout()
-        self.batch_out_label = QLabel("Output: (same as first target / batch_out)")
+        out = QWidget()
+        orow = QHBoxLayout(out)
+        orow.setContentsMargins(0, 0, 0, 0)
+        self.batch_out_label = QLabel("Next to the first target, in batch_out")
         self.batch_out_label.setObjectName("muted")
         self.batch_out_label.setWordWrap(True)
-        pick_out = QPushButton("Output folder")
-        pick_out.clicked.connect(self._batch_pick_output)
-        out_row.addWidget(self.batch_out_label, stretch=1)
-        out_row.addWidget(pick_out)
-        bl.addLayout(out_row)
-        layout.addWidget(batch)
-
-        layout.addStretch(1)
-        scroll.setWidget(rail)
-        return scroll
-
-    def _build_score_strip(self) -> QLabel:
-        self.score_chip = QLabel("Score: run a swap, then Score (Ctrl+E)")
-        self.score_chip.setObjectName("scoreChip")
-        self.score_chip.setWordWrap(True)
-        return self.score_chip
-
-    def _build_actions(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        self.swap_btn = QPushButton("Start face swap")
-        self.swap_btn.setObjectName("primaryButton")
-        self.swap_btn.setToolTip("Ctrl+Enter")
-        self.swap_btn.clicked.connect(self._start_swap)
-
-        self.score_btn = QPushButton("Score")
-        self.score_btn.setToolTip("Ctrl+E")
-        self.score_btn.clicked.connect(self._score_result)
-
-        self.webcam_btn = QPushButton("Webcam")
-        self.webcam_btn.setObjectName("accentButton")
-        self.webcam_btn.setToolTip("Ctrl+W")
-        self.webcam_btn.clicked.connect(self._toggle_webcam)
-
-        self.batch_btn = QPushButton("Run batch")
-        self.batch_btn.setToolTip("Ctrl+B — process all files in the Batch list")
+        pick = QPushButton("Change")
+        pick.setIcon(svg_icon("folder.svg", 16))
+        pick.clicked.connect(self._batch_pick_output)
+        orow.addWidget(self.batch_out_label, 1)
+        orow.addWidget(pick)
+        col.addWidget(self._section("Output folder", out))
+        col.addStretch(1)
+        self.batch_btn = self._primary("Run batch", "Ctrl B")
         self.batch_btn.clicked.connect(self._start_batch)
+        col.addWidget(self.batch_btn)
+        return page
 
-        self.save_btn = QPushButton("Save As…")
+    # ---------------------------------------------------------- live page
+    def _live_page(self) -> QWidget:
+        page, col = self._page()
+        info = QLabel("Live swaps your camera feed with the source face from the Swap tab. "
+                      "Heavy restore is skipped to keep the frame rate up.")
+        info.setObjectName("muted")
+        info.setWordWrap(True)
+        col.addWidget(info)
+        self.camera = SelectRow("Camera", [(f"Camera {i}", str(i)) for i in range(4)], "0")
+        self.detect_every = SelectRow(
+            "Detect faces", [("Every frame", "1"), ("Every 2nd frame", "2"),
+                             ("Every 3rd frame", "3"), ("Every 5th frame", "5")], "3", last=True)
+        box = QWidget()
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.setSpacing(0)
+        bl.addWidget(self.camera)
+        bl.addWidget(self.detect_every)
+        col.addWidget(self._section("Camera", box, spacing=4))
+        col.addStretch(1)
+        self.webcam_btn = self._primary("Start camera", "Ctrl W")
+        self.webcam_btn.clicked.connect(self._toggle_webcam)
+        col.addWidget(self.webcam_btn)
+        return page
+
+    # ---------------------------------------------------------- models page
+    def _models_page(self) -> QWidget:
+        page, col = self._page()
+        self.models_status = QLabel("Checking…")
+        self.models_status.setWordWrap(True)
+        folder = QPushButton("Open models folder")
+        folder.setIcon(svg_icon("folder-open.svg", 16))
+        folder.clicked.connect(lambda: (models_dir().mkdir(parents=True, exist_ok=True),
+                                        _open_folder(str(models_dir()))))
+        col.addWidget(self._section("Seamless preset", self.models_status, folder))
+        lic = QLabel(
+            "Ravana's code is MIT. Default weights are not: InsightFace models are "
+            "non-commercial research, CodeFormer is NTU S-Lab and HyperSwap is ResearchRAIL. "
+            "Check each licence before commercial use."
+        )
+        lic.setObjectName("muted")
+        lic.setWordWrap(True)
+        col.addWidget(self._section("Licences", lic))
+        col.addStretch(1)
+        self.models_btn = self._primary("Download models")
+        self.models_btn.clicked.connect(self._start_model_download)
+        col.addWidget(self.models_btn)
+        return page
+
+    # ================================================================ stage
+    def _build_stage(self) -> QWidget:
+        stage = QWidget()
+        col = QVBoxLayout(stage)
+        col.setContentsMargins(28, 24, 28, 16)
+        col.setSpacing(16)
+        self._stage_layout = col
+
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        titles = QVBoxLayout()
+        titles.setSpacing(4)
+        self.stage_title = QLabel("New swap")
+        self.stage_title.setObjectName("stageTitle")
+        self.stage_meta = QLabel("Add a source face and a target")
+        self.stage_meta.setObjectName("muted")
+        titles.addWidget(self.stage_title)
+        titles.addWidget(self.stage_meta)
+        head.addLayout(titles, 1)
+        self.view_mode = Segmented([("Compare", "compare"), ("Result", "result"), ("Side by side", "side")])
+        self.view_mode.changed.connect(lambda m: self.canvas.set_mode(m))
+        self.save_btn = QPushButton("Save as…")
+        self.save_btn.setIcon(svg_icon("save.svg", 16))
         self.save_btn.clicked.connect(self._save_as)
-
-        self.reveal_btn = QPushButton("Open folder")
-        self.reveal_btn.setObjectName("ghostButton")
+        self.reveal_btn = QPushButton("Show in folder")
+        self.reveal_btn.setIcon(svg_icon("reveal.svg", 16, COLORS["muted"]))
+        self.reveal_btn.setObjectName("ghost")
         self.reveal_btn.clicked.connect(self._reveal_result)
+        for value, icon in (("compare", "compare.svg"), ("result", "result.svg"), ("side", "side-by-side.svg")):
+            btn = self.view_mode._buttons[value]
+            btn.setIcon(svg_icon(icon, 15, COLORS["muted"]))
+            btn.setIconSize(QSize(15, 15))
+        head.addWidget(self.view_mode, 0, Qt.AlignmentFlag.AlignBottom)
+        head.addWidget(self.reveal_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        head.addWidget(self.save_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        col.addLayout(head)
 
-        row.addWidget(self.swap_btn, stretch=2)
-        row.addWidget(self.score_btn)
-        row.addWidget(self.webcam_btn)
-        row.addWidget(self.batch_btn)
-        row.addWidget(self.save_btn)
-        row.addWidget(self.reveal_btn)
-        return row
+        self.banner = Banner()
+        self.banner.action.connect(self._banner_action)
+        col.addWidget(self.banner)
 
-    def _build_footer(self) -> QHBoxLayout:
-        row = QHBoxLayout()
+        self.canvas = CompareCanvas()
+        self.canvas.setAcceptDrops(False)
+        col.addWidget(self.canvas, 1)
+
+        read = QHBoxLayout()
+        read.setSpacing(36)
+        self.m_id = Metric("ID similarity · ArcFace")
+        self.m_sharp = Metric("Sharpness gain", "metricValueBrass")
+        self.m_time = Metric("Swap time")
+        for m in (self.m_id, self.m_sharp, self.m_time):
+            read.addWidget(m)
+        read.addStretch(1)
+        status_col = QVBoxLayout()
+        status_col.setSpacing(6)
+        self.status = QLabel("Ready")
+        self.status.setObjectName("muted")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        self.status.setWordWrap(True)
+        self.status.setMinimumWidth(80)
+        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("ghost")
+        self.cancel_btn.clicked.connect(self._cancel_current)
+        self.cancel_btn.hide()
+        status_col.addWidget(self.status)
+        status_col.addWidget(self.cancel_btn, 0, Qt.AlignmentFlag.AlignRight)
+        read.addLayout(status_col, 1)
+        col.addLayout(read)
+
         self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self.status = QLabel("Ready — drop files or use File menu")
-        self.status.setObjectName("muted")
-        row.addWidget(self.progress, stretch=1)
-        row.addWidget(self.status)
-        return row
+        self.progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        col.addWidget(self.progress)
+        self._set_result_actions(False)
+        return stage
 
-    def _combo_data(self, box: QComboBox) -> str:
-        return str(box.currentData())
+    # ================================================================ responsive
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        self._apply_responsive(self.width())
 
-    def _current_config(self, *, realtime: bool = False):
-        cfg = build_config(
-            self._combo_data(self.quality),
-            self._combo_data(self.device),
-            self._combo_data(self.enhance),
-            self._combo_data(self.pixel_boost),
-            self._combo_data(self.face_select),
-            realtime=realtime,
-        )
-        cfg.detect_every_n = int(self.detect_every.value())
-        return cfg
+    def _apply_responsive(self, width: int) -> None:
+        mode = "wide" if width >= 1240 else "medium" if width >= 960 else "narrow"
+        if mode == self._compact:
+            return
+        self._compact = mode
+        rail_w = {"wide": 320, "medium": 276, "narrow": 264}[mode]
+        thumb_h = {"wide": 156, "medium": 112, "narrow": 92}[mode]
+        self._rail.setFixedWidth(rail_w)
+        self.source_card.set_thumb_height(thumb_h)
+        self.target_card.set_thumb_height(thumb_h)
+        self.quality_help.setVisible(mode == "wide")
+        self.view_mode.set_visible_item("side", mode != "narrow")
+        self.reveal_btn.setVisible(mode == "wide")
+        self.stage_meta.setVisible(mode != "narrow")
+        self.m_time.setVisible(mode != "narrow")
+        m = {"wide": (28, 24, 28, 16), "medium": (20, 20, 20, 14), "narrow": (14, 14, 14, 10)}[mode]
+        self._stage_layout.setContentsMargins(*m)
 
+    # ================================================================ shortcuts
+    def _build_shortcuts(self) -> None:
+        for seq, slot in (
+            ("Ctrl+O", self._select_source), ("Ctrl+T", self._select_target),
+            ("Ctrl+Return", self._start_swap), ("Ctrl+S", self._save_as),
+            ("Ctrl+B", self._start_batch), ("Ctrl+W", self._toggle_webcam),
+            ("Ctrl+1", lambda: self._go(0)), ("Ctrl+2", lambda: self._go(1)),
+            ("Ctrl+3", lambda: self._go(2)), ("Ctrl+4", lambda: self._go(3)),
+            ("Escape", self._cancel_current),
+        ):
+            act = QAction(self)
+            act.setShortcut(QKeySequence(seq))
+            act.triggered.connect(slot)
+            self.addAction(act)
+
+    # ================================================================ helpers
     def _set_status(self, text: str) -> None:
         self.status.setText(text)
 
-    def _set_thumb(self, label: QLabel, path: Optional[str]) -> None:
-        if not path:
-            label.setPixmap(QPixmap())
-            label.setText("No preview")
-            return
-        pix = load_path_pixmap(path, max_side=140)
-        if pix.isNull():
-            label.setText(Path(path).name)
-            return
-        label.setPixmap(
-            pix.scaled(
-                140,
-                68,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
-        label.setText("")
+    def _error(self, text: str) -> None:
+        self.banner.show_message(text, kind="error")
+        self._set_status("Something went wrong")
 
+    def _busy(self) -> Optional[str]:
+        for w, what in ((self._swap_worker, "a swap"), (self._batch_worker, "a batch"),
+                        (self._webcam_worker, "the camera"), (self._models_worker, "a model download")):
+            if w is not None and w.isRunning():
+                return what
+        return None
+
+    def _current_config(self, *, realtime: bool = False):
+        cfg = build_config(self.quality.value(), self.device.value(), self.restore.value(),
+                           self.boost.value(), self.faces.value(), realtime=realtime)
+        cfg.detect_every_n = int(self.detect_every.value())
+        return cfg
+
+    def _set_result_actions(self, enabled: bool) -> None:
+        self.save_btn.setEnabled(enabled)
+        self.reveal_btn.setEnabled(enabled)
+
+    def _start_job_ui(self, label: str) -> None:
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.cancel_btn.show()
+        self._set_status(label)
+
+    def _end_job_ui(self) -> None:
+        self.cancel_btn.hide()
+
+    def _update_title(self) -> None:
+        if self._source_path and self._target_path:
+            self.stage_title.setText(f"{Path(self._source_path).stem} → {Path(self._target_path).stem}")
+        elif self._source_path:
+            self.stage_title.setText(Path(self._source_path).stem)
+        cfg_bits = [dict(QUALITY_ITEMS_INV)[self.quality.value()]]
+        if self.restore.value() != "default":
+            cfg_bits.append(self.restore._label_for(self.restore.value()))
+        if self.boost.value() not in ("default",):
+            cfg_bits.append(f"boost {self.boost.value()}")
+        cfg_bits.append(self._device_label.text())
+        self.stage_meta.setText(" · ".join(cfg_bits))
+
+    # ================================================================ inputs
     def _apply_source(self, path: str) -> None:
         if Path(path).suffix.lower() not in IMAGE_EXTS:
-            QMessageBox.warning(self, "Invalid source", "Source must be an image.")
+            self._error("The source must be an image (PNG, JPG, WEBP or BMP).")
             return
         self._source_path = path
-        self._output_path = None
         self._last_dir = str(Path(path).parent)
-        self.source_name.setText(Path(path).name)
-        self._set_thumb(self.source_thumb, path)
-        self.preview.set_source_image(path)
-        self.preview.set_result_image(None)
-        self.score_chip.setText("Score: run a swap, then Score (Ctrl+E)")
-        self._set_status(f"Source: {Path(path).name}")
+        self.source_card.set_content(load_path_pixmap(path, max_side=480), Path(path).name)
+        self._update_title()
+        self._set_status("Source ready")
 
     def _apply_target(self, path: str) -> None:
         ext = Path(path).suffix.lower()
         if ext not in IMAGE_EXTS and ext not in VIDEO_EXTS:
-            QMessageBox.warning(
-                self, "Invalid target", "Target must be image or video."
-            )
+            self._error("The target must be an image or a video (MP4, MOV, AVI, MKV).")
             return
         self._target_path = path
         self._output_path = None
         self._last_dir = str(Path(path).parent)
         kind = "video" if ext in VIDEO_EXTS else "image"
-        self.target_name.setText(f"{Path(path).name}  ({kind})")
-        self._set_thumb(self.target_thumb, path)
-        self.preview.set_target_image(path)
-        self.preview.set_result_image(None)
-        self.score_chip.setText("Score: run a swap, then Score (Ctrl+E)")
-        self._set_status(f"Target: {Path(path).name}")
+        pix = load_path_pixmap(path, max_side=1600)
+        self.target_card.set_content(load_path_pixmap(path, max_side=480), f"{Path(path).name} · {kind}")
+        self.canvas.set_after(QPixmap())
+        self.canvas.set_before(pix)
+        self._set_result_actions(False)
+        for m in (self.m_id, self.m_sharp, self.m_time):
+            m.set(None)
+        self._update_title()
+        self._set_status("Target ready")
 
     def _select_source(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select source face image",
-            self._last_dir,
-            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All files (*.*)",
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "Choose the source face", self._last_dir,
+                                              "Images (*.png *.jpg *.jpeg *.bmp *.webp)")
         if path:
             self._apply_source(path)
 
     def _select_target(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select target image or video",
-            self._last_dir,
-            "Images & Videos (*.png *.jpg *.jpeg *.webp *.mp4 *.mov *.avi *.mkv);;"
-            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;"
-            "Videos (*.mp4 *.mov *.avi *.mkv);;All files (*.*)",
-        )
+            self, "Choose the target", self._last_dir,
+            "Images and videos (*.png *.jpg *.jpeg *.webp *.bmp *.mp4 *.mov *.avi *.mkv)")
         if path:
             self._apply_target(path)
 
-    def _start_swap(self) -> None:
-        if self._swap_worker and self._swap_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Processing already in progress.")
-            return
-        if self._models_worker and self._models_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Wait for model download to finish.")
-            return
-        if self._webcam_worker and self._webcam_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Stop webcam before swapping.")
-            return
-        if not self._source_path:
-            QMessageBox.warning(self, "Missing input", "Select a source face image.")
-            return
-        if not self._target_path:
-            QMessageBox.warning(
-                self, "Missing input", "Select a target image or video."
-            )
-            return
+    # ================================================================ consent
+    def _has_consent(self) -> bool:
+        return bool(self._settings.value("consent_ack", False, type=bool))
 
+    def _ask_consent(self, then) -> None:
+        self._pending_after_consent = then
+        self.banner.show_message(
+            "Before your first swap: confirm you have permission from the person whose face you "
+            "are using, and that you will label the result as synthetic where required.",
+            kind="info", action="I have consent")
+
+    def _banner_action(self) -> None:
+        if self._pending_after_consent is not None:
+            self._settings.setValue("consent_ack", True)
+            self.banner.hide()
+            fn, self._pending_after_consent = self._pending_after_consent, None
+            fn()
+        elif self._models_missing:
+            self.banner.hide()
+            self._go(3)
+            self._start_model_download()
+
+    # ================================================================ swap
+    def _start_swap(self) -> None:
+        busy = self._busy()
+        if busy:
+            self._error(f"Wait for {busy} to finish, or press Esc to cancel it.")
+            return
+        if not self._source_path or not self._target_path:
+            self._error("Add a source face and a target first. You can drop files onto the cards.")
+            return
+        if not self._has_consent():
+            self._ask_consent(self._start_swap)
+            return
+        self.banner.hide()
         target = Path(self._target_path)
         self._output_path = str(target.parent / f"{target.stem}_swapped{target.suffix}")
         self.swap_btn.setEnabled(False)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self._set_status("Processing...")
+        self._start_job_ui("Loading models")
+        self._update_title()
+        w = SwapWorker(self._source_path, self._target_path, self._output_path, self._current_config())
+        w.progress.connect(self.progress.setValue)
+        w.status.connect(self._set_status)
+        w.done.connect(self._on_swap_done)
+        w.failed.connect(self._on_swap_failed)
+        w.cancelled.connect(self._on_swap_cancelled)
+        w.finished.connect(lambda: (self.swap_btn.setEnabled(True), self._end_job_ui()))
+        self._swap_worker = w
+        if not self.canvas.has_result() and Path(self._target_path).suffix.lower() in VIDEO_EXTS:
+            self.canvas.set_empty_state("working", "Swapping your video", "This can take a while. Esc cancels.")
+        w.start()
 
-        worker = SwapWorker(
-            self._source_path,
-            self._target_path,
-            self._output_path,
-            self._current_config(),
-        )
-        worker.progress.connect(self.progress.setValue)
-        worker.status.connect(self._set_status)
-        worker.finished.connect(self._on_swap_finished)
-        worker.failed.connect(self._on_swap_failed)
-        self._swap_worker = worker
-        worker.start()
-
-    def _on_swap_finished(self, output: str) -> None:
-        self.swap_btn.setEnabled(True)
+    def _on_swap_done(self, output: str, seconds: float) -> None:
         self._output_path = output
-        self.preview.set_result_image(output)
-        self._set_status(f"Done: {Path(output).name}")
+        self.m_time.set(f"{seconds:.1f} s")
+        self._set_result_actions(True)
+        if Path(output).suffix.lower() in VIDEO_EXTS:
+            self._set_status(f"Saved {Path(output).name}")
+            self.canvas.set_after(load_path_pixmap(output, max_side=1600))
+            return
+        self.canvas.set_after(load_path_pixmap(output, max_side=1600))
+        self.view_mode.set_value("compare")
+        self.canvas.set_mode("compare")
+        self._set_status("Scoring")
+        self._score()
 
-    def _on_swap_failed(self, error: str) -> None:
-        self.swap_btn.setEnabled(True)
+    def _on_swap_failed(self, err: str) -> None:
         self.progress.setValue(0)
-        self._set_status("Error")
-        QMessageBox.critical(self, "Swap failed", error)
+        if "face" in err.lower() and ("no " in err.lower() or "not found" in err.lower()):
+            self.canvas.set_empty_state("no-face", "No face found",
+                                        "Try a clearer, front-facing photo or set Faces to All.")
+            self._error("No face was found. Use a sharper, front-facing photo, or set Faces to All.")
+        else:
+            self._error(f"Swap failed: {err}")
 
-    def _score_result(self) -> None:
-        if not self._source_path or not self._target_path:
-            QMessageBox.warning(
-                self, "Missing input", "Select source and target first."
-            )
+    def _on_swap_cancelled(self) -> None:
+        self.progress.setValue(0)
+        self._set_status("Cancelled")
+
+    # ================================================================ score
+    def _score(self) -> None:
+        if not (self._output_path and self._source_path and self._target_path):
             return
-        if not self._output_path or not Path(self._output_path).is_file():
-            QMessageBox.warning(self, "No result", "Run a face swap first.")
-            return
-        if Path(self._output_path).suffix.lower() in VIDEO_EXTS:
-            QMessageBox.information(
-                self, "Score", "Score currently supports image results only."
-            )
-            return
+        w = ScoreWorker(self._source_path, self._target_path, self._output_path, self.device.value())
+        w.done.connect(self._on_score_done)
+        w.failed.connect(lambda e: self._set_status(f"Saved. Scoring unavailable: {e}"))
+        self._score_worker = w
+        w.start()
 
-        self._set_status("Scoring...")
-        self.score_chip.setText("Score: computing…")
-        worker = ScoreWorker(
-            self._source_path,
-            self._target_path,
-            self._output_path,
-            self._combo_data(self.device),
-        )
-        worker.finished.connect(self._on_score_done)
-        worker.failed.connect(self._on_score_failed)
-        self._score_worker = worker
-        worker.start()
+    def _on_score_done(self, m: dict) -> None:
+        self.m_id.set(f"{m['id_similarity']:.3f}")
+        self.m_sharp.set(f"{m['sharpness_gain']:+.1f}")
+        verdict = "Identity looks strong" if m["passed_id"] else "Weak identity. Try High or GPEN."
+        self._set_status(verdict)
+        self.status.setToolTip(f"Saved to {self._output_path}")
 
-    def _on_score_done(self, msg: str) -> None:
-        self._set_status("Score complete")
-        self.score_chip.setText("Score: " + msg.replace("\n", "  |  "))
-        QMessageBox.information(self, "Swap score", msg)
-
-    def _on_score_failed(self, error: str) -> None:
-        self._set_status("Score failed")
-        self.score_chip.setText(f"Score failed: {error}")
-        QMessageBox.critical(self, "Score error", error)
-
+    # ================================================================ webcam
     def _toggle_webcam(self) -> None:
         if self._webcam_worker and self._webcam_worker.isRunning():
             self._webcam_worker.stop()
-            self.webcam_btn.setText("Webcam")
-            self.progress.setRange(0, 100)
-            self.progress.setValue(0)
-            self._set_status("Stopping webcam...")
+            self._set_status("Stopping camera")
+            return
+        busy = self._busy()
+        if busy:
+            self._error(f"Wait for {busy} to finish first.")
             return
         if not self._source_path:
-            QMessageBox.warning(
-                self, "Missing input", "Select a source face image first."
-            )
+            self._go(0)
+            self._error("Pick a source face on the Swap tab first.")
             return
-        if self._swap_worker and self._swap_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Wait for swap to finish.")
+        if not self._has_consent():
+            self._ask_consent(self._toggle_webcam)
             return
+        self.webcam_btn.setText("Stop camera    Ctrl W")
+        self.progress.setRange(0, 0)
+        w = WebcamWorker(self._source_path, self._current_config(realtime=True),
+                         camera_id=int(self.camera.value()))
+        w.frame_ready.connect(lambda f: self.canvas.set_live(bgr_to_qpixmap(f, max_side=1600)))
+        w.fps.connect(lambda v: self.m_time.set(f"{v:.0f} fps"))
+        w.status.connect(self._set_status)
+        w.failed.connect(lambda e: self._error(f"Camera error: {e}"))
+        w.finished.connect(self._on_webcam_ended)
+        self._webcam_worker = w
+        w.start()
 
-        self.preview.stop_playback()
-        self.webcam_btn.setText("Stop webcam")
-        self.progress.setRange(0, 0)  # indeterminate
-        self._set_status("Starting webcam...")
-        worker = WebcamWorker(
-            self._source_path,
-            self._current_config(realtime=True),
-            camera_id=int(self.camera_id.value()),
-        )
-        worker.frame_ready.connect(self.preview.show_frame_bgr)
-        worker.status.connect(self._set_status)
-        worker.failed.connect(self._on_webcam_failed)
-        worker.finished.connect(self._on_webcam_thread_finished)
-        self._webcam_worker = worker
-        worker.start()
-
-    def _on_webcam_failed(self, error: str) -> None:
-        self.webcam_btn.setText("Webcam")
+    def _on_webcam_ended(self) -> None:
+        self.webcam_btn.setText("Start camera    Ctrl W")
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
-        self._set_status("Webcam error")
-        QMessageBox.critical(self, "Webcam error", error)
+        self.canvas.clear_live()
 
-    def _on_webcam_thread_finished(self) -> None:
-        self.webcam_btn.setText("Webcam")
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-
+    # ================================================================ batch
     def _batch_paths(self) -> list[str]:
-        paths = []
-        for i in range(self.batch_list.count()):
-            item = self.batch_list.item(i)
-            path = item.data(Qt.ItemDataRole.UserRole) or item.text()
-            if path:
-                paths.append(str(path))
-        return paths
+        return [str(self.batch_list.item(i).data(Qt.ItemDataRole.UserRole))
+                for i in range(self.batch_list.count())]
 
     def _batch_add_paths(self, paths: list[str]) -> None:
         existing = set(self._batch_paths())
-        added = 0
         for path in paths:
             p = Path(path)
-            if not p.is_file():
-                continue
-            ext = p.suffix.lower()
-            if ext not in IMAGE_EXTS and ext not in VIDEO_EXTS:
+            if not p.is_file() or p.suffix.lower() not in IMAGE_EXTS | VIDEO_EXTS:
                 continue
             key = str(p.resolve())
             if key in existing:
                 continue
-            item = QListWidgetItem(p.name)
+            item = QListWidgetItem(f"○  {p.name}")
             item.setData(Qt.ItemDataRole.UserRole, key)
             item.setToolTip(key)
             self.batch_list.addItem(item)
             existing.add(key)
-            added += 1
-        if added:
-            self._set_status(
-                f"Batch: +{added} file(s), {self.batch_list.count()} total"
-            )
-            if not self._batch_output_dir and paths:
-                first = Path(paths[0])
-                self._batch_output_dir = str(first.parent / "batch_out")
-                self.batch_out_label.setText(f"Output: {self._batch_output_dir}")
+        if self.batch_list.count() and not self._batch_output_dir:
+            first = Path(self._batch_paths()[0])
+            self._batch_output_dir = str(first.parent / "batch_out")
+            self.batch_out_label.setText(self._batch_output_dir)
+        self._set_status(f"{self.batch_list.count()} in queue")
+        self._refresh_empty_state()
 
     def _batch_add_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
-            self,
-            "Add batch targets",
-            self._last_dir,
-            "Images & Videos (*.png *.jpg *.jpeg *.webp *.bmp *.mp4 *.mov *.avi *.mkv);;"
-            "All files (*.*)",
-        )
+            self, "Add targets", self._last_dir,
+            "Images and videos (*.png *.jpg *.jpeg *.webp *.bmp *.mp4 *.mov *.avi *.mkv)")
         if files:
             self._last_dir = str(Path(files[0]).parent)
             self._batch_add_paths(files)
 
     def _batch_add_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(
-            self, "Add folder of targets", self._last_dir
-        )
-        if not folder:
-            return
-        self._last_dir = folder
-        paths = []
-        for p in sorted(Path(folder).iterdir()):
-            if p.suffix.lower() in IMAGE_EXTS or p.suffix.lower() in VIDEO_EXTS:
-                paths.append(str(p))
-        self._batch_add_paths(paths)
+        folder = QFileDialog.getExistingDirectory(self, "Add a folder of targets", self._last_dir)
+        if folder:
+            self._last_dir = folder
+            self._batch_add_paths([str(p) for p in sorted(Path(folder).iterdir())])
 
     def _batch_remove_selected(self) -> None:
         for item in self.batch_list.selectedItems():
-            row = self.batch_list.row(item)
-            self.batch_list.takeItem(row)
+            self.batch_list.takeItem(self.batch_list.row(item))
+
+    def _batch_clear(self) -> None:
+        self.batch_list.clear()
 
     def _batch_pick_output(self) -> None:
-        start = self._batch_output_dir or self._last_dir
-        folder = QFileDialog.getExistingDirectory(self, "Batch output folder", start)
+        folder = QFileDialog.getExistingDirectory(self, "Batch output folder",
+                                                  self._batch_output_dir or self._last_dir)
         if folder:
             self._batch_output_dir = folder
-            self.batch_out_label.setText(f"Output: {folder}")
+            self.batch_out_label.setText(folder)
+
+    def _batch_open_item(self, item: QListWidgetItem) -> None:
+        out = item.data(Qt.ItemDataRole.UserRole + 1)
+        if out and Path(out).is_file():
+            _reveal(out)
+
+    def _batch_mark(self, i: int, glyph: str, tip: Optional[str] = None) -> None:
+        item = self.batch_list.item(i)
+        if item is None:
+            return
+        name = Path(str(item.data(Qt.ItemDataRole.UserRole))).name
+        item.setText(f"{glyph}  {name}")
+        if tip:
+            item.setToolTip(tip)
 
     def _start_batch(self) -> None:
         if self._batch_worker and self._batch_worker.isRunning():
             self._batch_worker.stop()
-            self.batch_btn.setText("Run batch")
-            self._set_status("Cancelling batch...")
+            self._set_status("Cancelling after the current item")
             return
-        if self._swap_worker and self._swap_worker.isRunning():
-            QMessageBox.information(
-                self, "Busy", "Wait for the current swap to finish."
-            )
-            return
-        if self._webcam_worker and self._webcam_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Stop webcam before batch.")
+        busy = self._busy()
+        if busy:
+            self._error(f"Wait for {busy} to finish first.")
             return
         if not self._source_path:
-            QMessageBox.warning(
-                self, "Missing input", "Select a source face image first."
-            )
+            self._go(0)
+            self._error("Pick a source face on the Swap tab first.")
             return
         targets = self._batch_paths()
         if not targets:
-            QMessageBox.warning(
-                self,
-                "Empty batch",
-                "Add target files or a folder in the Batch panel.",
-            )
+            self._error("The queue is empty. Add files or a folder.")
             return
-        out_dir = self._batch_output_dir
-        if not out_dir:
-            out_dir = str(Path(targets[0]).parent / "batch_out")
-            self._batch_output_dir = out_dir
-            self.batch_out_label.setText(f"Output: {out_dir}")
+        if not self._has_consent():
+            self._ask_consent(self._start_batch)
+            return
+        out_dir = self._batch_output_dir or str(Path(targets[0]).parent / "batch_out")
+        self._batch_output_dir = out_dir
+        for i in range(len(targets)):
+            self._batch_mark(i, "○")
+        self.batch_btn.setText("Stop batch    Ctrl B")
+        self._start_job_ui(f"0 of {len(targets)}")
+        w = BatchWorker(self._source_path, targets, out_dir, self._current_config())
+        w.progress.connect(self.progress.setValue)
+        w.status.connect(self._set_status)
+        w.item_started.connect(lambda i: self._batch_mark(i, "◐"))
+        w.item_done.connect(self._on_batch_item_done)
+        w.item_failed.connect(lambda i, e: self._batch_mark(i, "✕", e))
+        w.done.connect(self._on_batch_done)
+        w.failed.connect(lambda e: self._error(f"Batch failed: {e}"))
+        w.finished.connect(lambda: (self.batch_btn.setText("Run batch    Ctrl B"), self._end_job_ui()))
+        self._batch_worker = w
+        w.start()
 
-        self.batch_btn.setText("Cancel batch")
-        self.swap_btn.setEnabled(False)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self._set_status(f"Batch: 0/{len(targets)}...")
+    def _on_batch_item_done(self, i: int, out: str) -> None:
+        self._batch_mark(i, "●", out)
+        item = self.batch_list.item(i)
+        if item is not None:
+            item.setData(Qt.ItemDataRole.UserRole + 1, out)
 
-        worker = BatchWorker(
-            self._source_path,
-            targets,
-            out_dir,
-            self._current_config(),
-        )
-        worker.progress.connect(self.progress.setValue)
-        worker.status.connect(self._set_status)
-        worker.finished.connect(self._on_batch_finished)
-        worker.failed.connect(self._on_batch_failed)
-        self._batch_worker = worker
-        worker.start()
-
-    def _on_batch_finished(self, summary: str) -> None:
-        self.batch_btn.setText("Run batch")
-        self.swap_btn.setEnabled(True)
+    def _on_batch_done(self, summary: str) -> None:
         self._set_status(summary)
-        self.score_chip.setText(summary)
-        reply = QMessageBox.question(
-            self,
-            "Batch complete",
-            f"{summary}\n\nOpen output folder?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes and self._batch_output_dir:
-            folder = self._batch_output_dir
-            if sys.platform == "win32":
-                os.startfile(folder)  # noqa: S606
-            elif sys.platform == "darwin":
-                subprocess.run(["open", folder], check=False)
-            else:
-                subprocess.run(["xdg-open", folder], check=False)
+        self.banner.show_message(f"Batch finished: {summary}", kind="ok")
 
-    def _on_batch_failed(self, error: str) -> None:
-        self.batch_btn.setText("Run batch")
-        self.swap_btn.setEnabled(True)
-        self.progress.setValue(0)
-        self._set_status("Batch failed")
-        QMessageBox.critical(self, "Batch failed", error)
+    # ================================================================ models
+    _models_missing: list = []
 
+    def _check_models(self) -> None:
+        try:
+            self._models_missing = missing_preset_models(models_dir(), "seamless")
+        except Exception as exc:  # noqa: BLE001
+            self.models_status.setText(f"Could not check models: {exc}")
+            return
+        self._refresh_empty_state()
+        if self._models_missing:
+            self.models_status.setText(
+                "Missing: " + ", ".join(self._models_missing) + f"\n\nThey go into {models_dir()}")
+            self.banner.show_message(
+                "Seamless quality needs model weights that are not downloaded yet.",
+                kind="info", action="Download now")
+        else:
+            self.models_status.setText(f"All seamless models are ready in {models_dir()}")
+            self.models_btn.setEnabled(False)
+
+    def _start_model_download(self) -> None:
+        busy = self._busy()
+        if busy:
+            self._error(f"Wait for {busy} to finish first.")
+            return
+        self.models_btn.setEnabled(False)
+        self.swap_btn.setEnabled(False)
+        self._start_job_ui("Downloading models")
+        self.cancel_btn.hide()
+        w = ModelsDownloadWorker(str(models_dir()), "seamless")
+        w.progress.connect(self.progress.setValue)
+        w.status.connect(self._set_status)
+        w.done.connect(lambda s: (self.banner.show_message(s, kind="ok"), self._check_models()))
+        w.failed.connect(lambda e: (self._error(f"Download failed: {e}"), self.models_btn.setEnabled(True)))
+        w.finished.connect(lambda: (self.swap_btn.setEnabled(True), self._end_job_ui()))
+        self._models_worker = w
+        w.start()
+
+    # ================================================================ result actions
     def _save_as(self) -> None:
         if not self._output_path or not Path(self._output_path).is_file():
-            QMessageBox.warning(self, "No result", "Nothing to save yet.")
+            self._error("There is no result to save yet.")
             return
         src = Path(self._output_path)
-        dest, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save result",
-            str(Path(self._last_dir) / src.name),
-            f"*{src.suffix};;All files (*.*)",
-        )
-        if not dest:
-            return
-        shutil.copy2(src, dest)
-        self._set_status(f"Copied to {Path(dest).name}")
+        dest, _ = QFileDialog.getSaveFileName(self, "Save result", str(Path(self._last_dir) / src.name),
+                                              f"*{src.suffix}")
+        if dest:
+            shutil.copy2(src, dest)
+            self._set_status(f"Saved a copy as {Path(dest).name}")
 
     def _reveal_result(self) -> None:
-        if not self._output_path or not Path(self._output_path).is_file():
-            QMessageBox.warning(self, "No result", "Nothing to reveal yet.")
-            return
-        _reveal_in_explorer(self._output_path)
+        if self._output_path and Path(self._output_path).is_file():
+            _reveal(self._output_path)
 
-    def _maybe_prompt_models(self) -> None:
-        if self._models_prompted:
-            return
-        self._models_prompted = True
-        try:
-            missing = missing_preset_models(models_dir(), "seamless")
-        except Exception as exc:
-            self._set_status(f"Model check failed: {exc}")
-            return
-        if not missing:
-            return
-        reply = QMessageBox.question(
-            self,
-            "Download models?",
-            "Seamless face-swap needs weights that are not on disk yet:\n\n"
-            + ", ".join(missing)
-            + f"\n\nDownload into:\n{models_dir()}\n\n"
-            "(You can also use Help → Download models… later.)",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self._start_model_download(prompt=False)
-
-    def _start_model_download(self, *, prompt: bool = True) -> None:
-        if self._models_worker and self._models_worker.isRunning():
-            QMessageBox.information(self, "Busy", "Model download already running.")
-            return
-        if any(
-            w and w.isRunning()
-            for w in (self._swap_worker, self._batch_worker, self._webcam_worker)
-        ):
-            QMessageBox.information(self, "Busy", "Finish the current job first.")
-            return
-
-        dest = models_dir()
-        if prompt:
-            missing = missing_preset_models(dest, "seamless")
-            if not missing:
-                QMessageBox.information(
-                    self,
-                    "Models ready",
-                    f"Seamless preset is already present in:\n{dest}",
-                )
-                return
-            reply = QMessageBox.question(
-                self,
-                "Download models",
-                "Download seamless weights " f"({', '.join(missing)}) into:\n{dest}?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-
-        self.swap_btn.setEnabled(False)
-        self.batch_btn.setEnabled(False)
-        self.progress.setRange(0, 100)
-        self.progress.setValue(0)
-        self._set_status("Downloading models...")
-
-        worker = ModelsDownloadWorker(str(dest), "seamless")
-        worker.progress.connect(self.progress.setValue)
-        worker.status.connect(self._set_status)
-        worker.finished.connect(self._on_models_done)
-        worker.failed.connect(self._on_models_failed)
-        self._models_worker = worker
-        worker.start()
-
-    def _on_models_done(self, summary: str) -> None:
-        self.swap_btn.setEnabled(True)
-        self.batch_btn.setEnabled(True)
-        self.progress.setValue(100)
-        self._set_status(summary)
-        QMessageBox.information(self, "Models ready", summary)
-
-    def _on_models_failed(self, error: str) -> None:
-        self.swap_btn.setEnabled(True)
-        self.batch_btn.setEnabled(True)
-        self.progress.setValue(0)
-        self._set_status("Model download failed")
-        QMessageBox.critical(self, "Download failed", error)
-
-    def _about(self) -> None:
-        QMessageBox.about(
-            self,
-            "About Ravana",
-            f"<b>Ravana</b> v{VERSION}<br/>"
-            "Open-source face-swap SDK<br/>"
-            "HyperSwap / InSwapper · GFPGAN / GPEN · ONNX<br/><br/>"
-            f"Models folder: <code>{models_dir()}</code><br/><br/>"
-            "Shortcuts: Ctrl+O source · Ctrl+T target · "
-            "Ctrl+Enter swap · Ctrl+E score · Ctrl+W webcam · Ctrl+B batch",
-        )
+    def _cancel_current(self) -> None:
+        if self._swap_worker and self._swap_worker.isRunning():
+            self._swap_worker.stop()
+            self._set_status("Cancelling")
+        elif self._batch_worker and self._batch_worker.isRunning():
+            self._batch_worker.stop()
+            self._set_status("Cancelling after the current item")
+        elif self._webcam_worker and self._webcam_worker.isRunning():
+            self._webcam_worker.stop()
+        elif self.banner.isVisible():
+            self.banner.hide()
 
     def closeEvent(self, event) -> None:  # noqa: N802
-        if self._batch_worker and self._batch_worker.isRunning():
-            self._batch_worker.stop()
-            self._batch_worker.wait(3000)
-        if self._models_worker and self._models_worker.isRunning():
-            self._models_worker.wait(1500)
-        if self._webcam_worker and self._webcam_worker.isRunning():
-            self._webcam_worker.stop()
-            self._webcam_worker.wait(3000)
-        self.preview.stop_playback()
+        for w in (self._batch_worker, self._swap_worker, self._webcam_worker):
+            if w is not None and w.isRunning():
+                w.stop()
+        for w in (self._batch_worker, self._swap_worker, self._webcam_worker,
+                  self._score_worker, self._models_worker):
+            if w is not None and w.isRunning():
+                w.wait(4000)
         super().closeEvent(event)
+
+
+QUALITY_ITEMS_INV = [(v, k) for k, v in QUALITY_ITEMS]

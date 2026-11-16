@@ -428,7 +428,8 @@ class FaceSwapTrainer:
             def _load(self, path):
                 import cv2 as _cv2
 
-                img = _cv2.imread(path)
+                from ..core.io import imread_unicode
+                img = imread_unicode(path)
                 if img is None:
                     img = np.zeros(
                         (self.resolution, self.resolution, 3), dtype=np.uint8

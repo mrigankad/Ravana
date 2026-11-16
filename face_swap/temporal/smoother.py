@@ -318,24 +318,43 @@ def _bbox_iou(a: np.ndarray, b: np.ndarray) -> float:
     return float(inter / denom) if denom > 0 else 0.0
 
 
+def _assign_track(face: Any, tracks, track_id: int, kps) -> None:
+    """Tag ``face`` with a track id and seed/advance its One-Euro kps filter."""
+    try:
+        face.track_id = track_id
+    except Exception:
+        pass
+    if tracks is not None and kps is not None:
+        sm = tracks.filter(track_id, np.asarray(kps, dtype=np.float32))
+        try:
+            face.kps = sm
+        except Exception:
+            pass
+
+
 def ema_smooth_insight_faces(
     faces: List[Any],
     prev_faces: Optional[List[Any]],
     alpha: float = 0.35,
     iou_threshold: float = 0.25,
+    kps_tracks: Any = None,
 ) -> List[Any]:
     """
-    EMA-smooth InsightFace ``Face`` bbox + kps against the previous frame.
+    Smooth InsightFace ``Face`` bbox + kps against the previous frame.
 
-    ``alpha`` is the weight on the *current* detection (0.35 ≈ mild temporal lag).
-    Unmatched faces pass through unchanged. Returns new face objects when possible.
+    bbox uses an EMA (``alpha`` = weight on the current detection). When
+    ``kps_tracks`` (a ``OneEuroTracks``) is given, keypoints use a per-track
+    One-Euro filter instead of the EMA (less lag on fast motion, less jitter at
+    rest). Faces are matched to the previous frame by bbox IoU; unmatched faces
+    start a new track. Returns new face objects when possible.
     """
     if not faces:
+        if kps_tracks is not None:
+            kps_tracks.prune([])
         return []
-    if not prev_faces:
-        return list(faces)
 
     alpha = float(np.clip(alpha, 0.05, 1.0))
+    prev_faces = prev_faces or []
     used_prev = set()
     out: List[Any] = []
 
@@ -350,8 +369,21 @@ def ema_smooth_insight_faces(
                 best_iou = iou
                 best_i = i
 
+        kps = getattr(face, "kps", None)
+
         if best_i < 0:
-            out.append(face)
+            nf = face
+            if kps_tracks is not None:
+                try:
+                    from insightface.app.common import Face
+
+                    nf = Face(dict(face))
+                except Exception:
+                    nf = face
+                global _NEXT_TRACK
+                _NEXT_TRACK += 1
+                _assign_track(nf, kps_tracks, _NEXT_TRACK, kps)
+            out.append(nf)
             continue
 
         used_prev.add(best_i)
@@ -366,9 +398,14 @@ def ema_smooth_insight_faces(
         pb = np.asarray(prev.bbox, dtype=np.float32)
         nf.bbox = (alpha * bbox + (1.0 - alpha) * pb).astype(np.float32)
 
-        kps = getattr(face, "kps", None)
         pkps = getattr(prev, "kps", None)
-        if kps is not None and pkps is not None:
+        if kps_tracks is not None and kps is not None:
+            tid = getattr(prev, "track_id", None)
+            if tid is None:
+                _NEXT_TRACK += 1
+                tid = _NEXT_TRACK
+            _assign_track(nf, kps_tracks, tid, kps)
+        elif kps is not None and pkps is not None:
             k = np.asarray(kps, dtype=np.float32)
             p = np.asarray(pkps, dtype=np.float32)
             if k.shape == p.shape:
@@ -376,4 +413,11 @@ def ema_smooth_insight_faces(
 
         out.append(nf)
 
+    if kps_tracks is not None:
+        kps_tracks.prune(
+            [getattr(f, "track_id", None) for f in out if hasattr(f, "track_id")]
+        )
     return out
+
+
+_NEXT_TRACK = 0

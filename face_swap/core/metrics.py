@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import cv2
+from .io import imread_unicode
 import numpy as np
 
 from .adaptive import cosine_similarity, select_faces
@@ -96,7 +97,7 @@ def mean_lab_delta(
 
 def _load_bgr(img: PathOrArray) -> np.ndarray:
     if isinstance(img, str):
-        out = cv2.imread(img)
+        out = imread_unicode(img)
         if out is None:
             raise ValueError(f"Could not load image: {img}")
         return out

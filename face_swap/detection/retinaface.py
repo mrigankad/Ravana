@@ -84,14 +84,8 @@ class RetinaFaceDetector(FaceDetector):
         if self._face_analysis is None:
             self.load_model()
 
-        # InsightFace expects RGB
-        if frame.shape[2] == 3:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        else:
-            frame_rgb = frame
-
-        # Detect faces
-        faces = self._face_analysis.get(frame_rgb)
+        # InsightFace FaceAnalysis.get expects BGR (OpenCV order): pass through.
+        faces = self._face_analysis.get(frame)
 
         results = []
         for face in faces:
@@ -127,12 +121,8 @@ class RetinaFaceDetector(FaceDetector):
         if self._face_analysis is None:
             self.load_model()
 
-        if frame.shape[2] == 3:
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        else:
-            frame_rgb = frame
-
-        faces = self._face_analysis.get(frame_rgb)
+        # BGR in, BGR expected by insightface (no colour conversion).
+        faces = self._face_analysis.get(frame)
 
         results = []
         for face in faces:

@@ -14,7 +14,7 @@ This module extends the base TemporalSmoother with:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -125,6 +125,60 @@ class OpticalFlowSmoother:
         self._prev_output = result.copy()
         self._frame_count += 1
 
+        return result
+
+    def observe(self, current_output: np.ndarray, current_frame: np.ndarray) -> None:
+        """Record state without blending (e.g. frames with no face ROI)."""
+        self._prev_gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+        self._prev_output = current_output.copy()
+        self._frame_count += 1
+
+    def smooth_frame_roi(
+        self,
+        current_output: np.ndarray,
+        current_frame: np.ndarray,
+        roi: Tuple[int, int, int, int],
+    ) -> np.ndarray:
+        """
+        Flow-guided smoothing restricted to ``roi`` = (x0, y0, x1, y1).
+
+        Flow is estimated and the previous output warped only inside the ROI,
+        and the blend is feathered at the ROI border. Pixels outside the ROI are
+        returned exactly as given, so the background never ghosts and the
+        recursive state cannot smear it.
+        """
+        h, w = current_output.shape[:2]
+        x0, y0, x1, y1 = (int(v) for v in roi)
+        x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, w), min(y1, h)
+        gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+        if (
+            self._prev_gray is None
+            or self._prev_output is None
+            or self._prev_output.shape != current_output.shape
+            or x1 - x0 < 16
+            or y1 - y0 < 16
+        ):
+            self._prev_gray = gray
+            self._prev_output = current_output.copy()
+            self._frame_count += 1
+            return current_output
+
+        flow = self._compute_flow(self._prev_gray[y0:y1, x0:x1], gray[y0:y1, x0:x1])
+        mag = np.linalg.norm(flow, axis=2)
+        flow[mag > self.config.max_flow_magnitude] = 0.0
+        warped = self._warp_frame(self._prev_output[y0:y1, x0:x1], flow)
+
+        weight = _feather_window(y1 - y0, x1 - x0) * float(self.config.warp_blend)
+        weight = weight[:, :, None]
+        cur = current_output[y0:y1, x0:x1].astype(np.float32)
+        blended = weight * warped.astype(np.float32) + (1.0 - weight) * cur
+
+        result = current_output.copy()
+        result[y0:y1, x0:x1] = np.clip(blended, 0, 255).astype(np.uint8)
+
+        self._prev_gray = gray
+        self._prev_output = result.copy()
+        self._frame_count += 1
         return result
 
     def smooth_latent(
@@ -268,6 +322,20 @@ class OpticalFlowSmoother:
             borderMode=cv2.BORDER_REPLICATE,
         )
         return warped
+
+
+def _feather_window(h: int, w: int, frac: float = 0.15) -> np.ndarray:
+    """(h, w) float32 window: 1 in the middle, ramping to ~0 at the border."""
+
+    def ramp(n: int) -> np.ndarray:
+        r = np.ones(n, dtype=np.float32)
+        k = max(1, int(n * frac))
+        edge = np.linspace(0.0, 1.0, k, endpoint=False, dtype=np.float32)
+        r[:k] = np.minimum(r[:k], edge)
+        r[-k:] = np.minimum(r[-k:], edge[::-1])
+        return r
+
+    return np.outer(ramp(h), ramp(w)).astype(np.float32)
 
 
 class FlowGuidedBlender:

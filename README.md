@@ -1,265 +1,127 @@
-<div align="center">
-  <img src="docs/assets/mascot.png" width="280" alt="Ravana real-time face-swap SDK mascot">
-  <h1>Ravana</h1>
-  <p><b>Open-source Python face-swap SDK</b> for images, video, and webcam.<br/>
-  HyperSwap / InSwapper · GFPGAN / GPEN / CodeFormer · ONNX Runtime on <b>CUDA</b>, <b>AMD DirectML</b>, or CPU.</p>
+<p align="center">
+  <img src="docs/assets/brand/readme-hero.png" width="100%" alt="Ravana: face swap that tells you how good it is">
+</p>
 
-  <p>
-    <a href="https://github.com/mrigankad/Ravana/stargazers"><img src="https://img.shields.io/github/stars/mrigankad/Ravana?style=social" alt="GitHub stars"></a>
-    <a href="https://github.com/mrigankad/Ravana/releases"><img src="https://img.shields.io/github/v/release/mrigankad/Ravana?display_name=tag" alt="Latest release"></a>
-    <img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python 3.9+">
-    <img src="https://img.shields.io/badge/License-MIT-purple.svg" alt="MIT License">
-    <img src="https://img.shields.io/badge/ONNX-CUDA%20%7C%20DirectML%20%7C%20CPU-orange.svg" alt="ONNX backends">
-  </p>
-</div>
+<p align="center">
+  <a href="https://github.com/mrigankad/Ravana/releases"><img src="https://img.shields.io/github/v/release/mrigankad/Ravana?display_name=tag&color=E0401F" alt="Release"></a>
+  <img src="https://img.shields.io/badge/python-3.9%2B-15120F" alt="Python 3.9+">
+  <img src="https://img.shields.io/badge/runs%20on-CUDA%20%C2%B7%20DirectML%20%C2%B7%20CPU-15120F" alt="CUDA, DirectML, CPU">
+  <img src="https://img.shields.io/badge/code-MIT-15120F" alt="MIT">
+</p>
 
-```bash
-# From GitHub (latest main)
-pip install "git+https://github.com/mrigankad/Ravana.git"
+**Ravana** is an open-source face-swap SDK and desktop app for images, video and webcam. Most swappers leave you to judge quality by eye. Ravana gives every result an identity score (ArcFace) and a sharpness score, so you can compare settings with numbers instead of guesses.
 
-# Or clone for extras / demos
-git clone https://github.com/mrigankad/Ravana.git && cd Ravana
-pip install -e ".[directml]"   # AMD Windows
-# pip install -e ".[gpu]"      # NVIDIA
-# pip install -e .             # CPU
-```
+## Get started
 
-> **Package name:** install/import as `ravana-sdk` on PyPI (the name `ravana` is taken). Python imports stay `from face_swap import ...`.
+**Windows app.** Download `Ravana-<version>-windows-x64.zip` from [Releases](https://github.com/mrigankad/Ravana/releases), unzip it and run `Ravana.exe`. Models download on first run.
 
----
-
-## Features (0.3.3)
-
-| Area | What’s included |
-|------|-----------------|
-| **Quality** | `seamless` preset: HyperSwap-256, GFPGAN (default), XSeg occlusion, lighting/grain match, tiled pixel-boost 1024 |
-| **Restores** | GFPGAN · GPEN · CodeFormer · RestoreFormer++ · OpenCV (`--enhance`) |
-| **Realtime** | `realtime=True`: detect-every-N, ROI track, skip heavy restore, webcam FPS HUD |
-| **Faces** | Select `all` / `largest` / `first` / `index` / `pose` |
-| **Metrics** | ArcFace ID + sharpness (`evaluate` / `evaluate-batch` / GUI Score) |
-| **Models** | Progress download CLI + presets (`core`, `seamless`, `enhance`, `all`) |
-| **Device** | `device="auto"` → CUDA → DirectML → CPU |
-| **Desktop GUI** | PySide6 app — drag-drop, batch, webcam, score (`pip install -e ".[gui]"`) |
-
----
-
-## Install
+**Python.**
 
 ```bash
-git clone https://github.com/mrigankad/Ravana.git
-cd Ravana
-python -m venv .venv
-# Windows: .\.venv\Scripts\activate
-pip install -e .
-# GPU extras:
-pip install -e ".[gpu]"       # NVIDIA
-pip install -e ".[directml]"  # AMD Windows
+pip install "git+https://github.com/mrigankad/Ravana.git"     # CPU
+pip install "ravana-sdk[gpu] @ git+https://github.com/mrigankad/Ravana.git"       # NVIDIA
+pip install "ravana-sdk[directml] @ git+https://github.com/mrigankad/Ravana.git"  # AMD / Intel on Windows
+python scripts/first_run_check.py --download   # checks your GPU and fetches models
 ```
-
-CLI entry points after install: `ravana` or `face-swap`.
-
-**First run** prefetch weights (or they download on first swap):
-
-```bash
-python scripts/first_run_check.py --download
-# same as: python -m demos.cli models download --preset seamless
-```
-
-ONNX restores work on Python 3.13 without `basicsr`. Optional `.[enhancement]` PyTorch wheels are not required.
-
----
-
-## Quick start
-
-### Python
 
 ```python
 import cv2
 from face_swap import FaceSwapConfig, swap_image
 
-config = FaceSwapConfig(
-    quality="seamless",
-    device="auto",
-    # enhance_method="gpen",       # or restoreformer / codeformer / opencv
-    # pixel_boost=1024,            # seamless default
-    # face_select="largest",
-)
-
-out = swap_image(
-    cv2.imread("source.jpg"),
-    cv2.imread("target.jpg"),
-    config,
-)
+out = swap_image(cv2.imread("source.jpg"), cv2.imread("target.jpg"),
+                 FaceSwapConfig(quality="seamless", device="auto"))
 cv2.imwrite("output.jpg", out)
 ```
 
-### CLI
+## The desktop app
+
+<p align="center"><img src="docs/assets/brand/app-result-1440.png" width="100%" alt="Ravana desktop app: inputs and settings on the left, compare slider and scores on the right"></p>
+
+Drop a source face and a target, pick a quality, and press **Swap face**. You get:
+
+- a compare slider over the result
+- ID and sharpness scores
+- one-click variants (GFPGAN, GPEN, boost) to compare side by side
+
+**Batch** and **Live** (webcam) are one tab away.
 
 ```bash
-# Image
-python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --device auto
-
-# Restore override
-python -m demos.cli -s source.jpg -t target.jpg -o out.jpg -q seamless --enhance gpen
-
-# Video (audio remuxed when ffmpeg is available)
-python -m demos.cli -s source.jpg -t input.mp4 -o output.mp4 -q medium
-
-# Webcam (realtime path)
-python -m demos.webcam_demo -s source.jpg --device auto --detect-every 3
-# keys: q quit | d detect-N | e enhance | h HUD | r reset
-
-# Models
-python -m demos.cli models list --presets
-python -m demos.cli models download --preset seamless
-
-# Quality metrics
-python -m demos.cli evaluate -s source.jpg -t target.jpg -o out.jpg -q seamless
-python -m demos.cli evaluate-batch --pairs 2 --enhance gfpgan,gpen --boosts 512
+pip install -e ".[gui]" && python -m demos.gui
 ```
 
-### GUI
+The window adapts from 1440 px down to about 780 px wide: the rail narrows, secondary text folds away and the compare canvas keeps the space.
 
-PySide6 desktop app with branded layout, drag-and-drop, source/target/result previews, batch processing, in-app video playback, and embedded webcam.
+<p align="center"><img src="docs/assets/brand/app-compact.png" width="420" alt="Ravana at a compact window width"></p>
+
+## What's inside
+
+| | |
+|---|---|
+| **Swappers** | HyperSwap 256 (seamless), InSwapper 128 (fast) |
+| **Restore** | GFPGAN · GPEN · CodeFormer · RestoreFormer++ · OpenCV |
+| **Masks** | XSeg occlusion, lighting and colour match |
+| **Faces** | `all` · `largest` · `first` · `index` · `pose` |
+| **Realtime** | detect-every-N, ROI tracking, light restore for webcam |
+| **Scores** | ArcFace identity + sharpness (`evaluate`, `evaluate-batch`, GUI) |
+| **Devices** | `device="auto"` picks CUDA, then DirectML, then CPU |
+
+| Preset | Use it for |
+|---|---|
+| `seamless` | Best stills. HyperSwap, GFPGAN, XSeg, lighting, boost 1024 |
+| `high` / `medium` | Video at good speed |
+| `fast_cpu` / `low` | No GPU, or quick previews |
+| `realtime=True` | Webcam on any preset |
+
+## How it works
+
+<p align="center"><img src="docs/assets/brand/agent-graph.png" width="100%" alt="Ravana pipeline: ingest, detect and track, identity, swap, mask, restore, composite, temporal, verify, seal and encode"></p>
+
+The figure shows the target pipeline. The roadmap below tracks which parts ship today.
+
+## Design kit
+
+The app uses a single 78-icon set (24 px grid, 1.75 stroke) and **Dasha**, a ten-headed mascot with one pose per app state. Source files, usage rules and the build script are in [`design/kit/`](design/kit/KIT.md).
+
+<p align="center"><img src="docs/assets/brand/character-sheet.png" width="100%" alt="Dasha character poses for ten app states"></p>
+
+## CLI
 
 ```bash
-pip install -e ".[gui]"   # PySide6
-python -m demos.gui
+ravana -s source.jpg -t target.jpg -o out.jpg -q seamless
+ravana -s source.jpg -t input.mp4  -o out.mp4 -q medium
+python -m demos.webcam_demo -s source.jpg --detect-every 3
+ravana models download --preset seamless
+ravana evaluate -s source.jpg -t target.jpg -o out.jpg
 ```
 
-Windows one-folder executable (PyInstaller; large because of torch/onnx):
+## Roadmap
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1
-# → dist\Ravana\Ravana.exe  (models download on first run, or copy models\ beside the exe)
+| Phase | Highlights |
+|---|---|
+| **P0** | Build the pipeline once per session, correct pixel-boost tiling, ROI compositing, H.264 + audio, cancellable jobs, light theme |
+| **P1** | Hardware doctor, IOBinding + TensorRT FP16, stage workers on ring buffers, multi-face tracker, runs history |
+| **P2** | Full GPU frame path (NVDEC → NVENC), virtual camera, signed provenance manifest |
 
-powershell -ExecutionPolicy Bypass -File .\scripts\package_release.ps1
-# → dist\Ravana-0.3.4-windows-x64.zip
-```
+The full research, gap analysis and plan are in [`docs/research/`](docs/research/).
 
-<p align="center">
-  <img src="docs/assets/gui/gui_swap_result.png" width="900" alt="Ravana desktop GUI showing source, target, seamless result, and score metrics">
-</p>
+## Licences, read before commercial use
 
-<p align="center">
-  <img src="docs/assets/gui/gui_overview.png" width="900" alt="Ravana desktop GUI empty state with drop zones and controls">
-</p>
+The Ravana code is MIT. The **default model weights are not**:
 
-Quality / device / restore / pixel-boost / face select, plus **Score**, **Run batch**, **Webcam**, and **Save As**.
+- InsightFace models are for non-commercial research.
+- CodeFormer is under the NTU S-Lab licence.
+- HyperSwap is under ResearchRAIL.
 
----
+Check each model's licence before shipping anything.
 
-## Gallery
+## Use it responsibly
 
-Higher-resolution Unsplash demo portraits (replacing the old tiny thumbnails), swapped locally with `quality=seamless`:
+Ravana is for VFX, entertainment, privacy and creative work **with the consent of everyone shown**. Don't use it to impersonate, deceive or harass. Label synthetic media where the law requires it (for example EU AI Act Art. 50). An optional invisible watermark is available for provenance.
 
-<p align="center">
-  <img src="docs/assets/gui/runs_strip.jpg" width="900" alt="Source, target, seamless, GPEN, and pixel-boost 1024 outputs">
-</p>
-
-<p align="center">
-  <img src="docs/assets/gui/runs_strip_b.jpg" width="700" alt="Second demo pair: source, target, seamless result">
-</p>
-
-| Face select `all` | Face select `largest` |
-|:-----------------:|:---------------------:|
-| ![all](docs/assets/gui/two_all_preview.jpg) | ![largest](docs/assets/gui/two_largest_preview.jpg) |
-
----
-
-## Comparisons
-
-Illustrative Unsplash portraits for demo quality only — not for identity claims. Regenerate locally with the CLI.
-
-### Source → target → seamless
-
-| Source | Target | Seamless (`quality=seamless`) |
-|:------:|:------:|:-----------------------------:|
-| ![source](docs/assets/comparisons/woman1.jpg) | ![target](docs/assets/comparisons/man1.jpg) | ![seamless](docs/assets/comparisons/seamless_woman1_on_man1.jpg) |
-
-Also available: [GPEN restore](docs/assets/comparisons/gpen_woman1_on_man1.jpg) on the same pair.
-
-### Alternate pair
-
-| Source | Target | Seamless |
-|:------:|:------:|:--------:|
-| ![source](docs/assets/comparisons/source_b.jpg) | ![target](docs/assets/comparisons/target_b.jpg) | ![seamless](docs/assets/comparisons/seamless_b.jpg) |
-
-### Pixel boost 512 vs 1024
-
-| Boost 512 | Boost 1024 |
-|:---------:|:----------:|
-| ![512](docs/assets/comparisons/boost_512.jpg) | ![1024](docs/assets/comparisons/boost_1024.jpg) |
-
-### Face select: all vs largest
-
-| `face_select=all` | `face_select=largest` |
-|:-----------------:|:---------------------:|
-| ![all](docs/assets/comparisons/two_all.jpg) | ![largest](docs/assets/comparisons/two_largest.jpg) |
-
-### Metrics (local A/B, DirectML)
-
-`evaluate-batch` on `woman1 → man1`, pixel-boost 512:
-
-| Variant | ID similarity | Sharpness Δ | Time |
-|---------|--------------:|------------:|-----:|
-| GFPGAN | 0.309 | +16.9 | ~2.3 s |
-| OpenCV | 0.324 | +6.5 | ~0.37 s |
-
-Higher sharpness gain with GFPGAN; OpenCV is faster with slightly higher ArcFace ID on this pair. Re-run with your hardware:
+## Contributing
 
 ```bash
-python -m demos.cli evaluate-batch --pairs 1 --enhance gfpgan,opencv --boosts 512
-```
-
----
-
-## Pipeline
-
-```mermaid
-flowchart LR
-  IN[Image / Video / Webcam] --> DET[Detect buffalo_l]
-  DET --> SEL[Face select]
-  SEL --> SWP[HyperSwap / InSwapper]
-  SWP --> MASK[XSeg + lighting]
-  MASK --> ENH[Restore + pixel boost]
-  ENH --> TMP[Temporal EMA / flow]
-  TMP --> OUT[Output]
-```
-
-| Preset | Behavior |
-|--------|----------|
-| `seamless` | HyperSwap + GFPGAN + XSeg + lighting + boost 1024 + video temporal |
-| `high` / `medium` | InSwapper + lighter restore |
-| `fast_cpu` / `low` | Speed path, enhance off |
-| `realtime=True` | Any quality + detect-every-N + ROI + skip heavy restore (webcam) |
-
----
-
-## Docs & tests
-
-```bash
-# Unit tests
 python -m pytest tests/ -q
-
-# MkDocs (optional)
-pip install mkdocs-material mkdocstrings[python]
-mkdocs serve
 ```
 
-- Getting started: [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md)
-- Changelog: [CHANGELOG.md](CHANGELOG.md)
-
----
-
-## Ethical use
-
-For entertainment, VFX, privacy, and creative work **with consent**. Do not use for non-consensual deepfakes, impersonation, or fraud. You are responsible for complying with local law. Optional invisible DCT watermarking is available for provenance.
-
-Third-party model licenses (InsightFace, FaceFusion HyperSwap ResearchRAIL, GFPGAN/GPEN/etc.) apply to downloaded weights review those before commercial use.
-
----
-
-## License
-
-MIT see [LICENSE](LICENSE).
+Changelog: [CHANGELOG.md](CHANGELOG.md) · Docs: `mkdocs serve`

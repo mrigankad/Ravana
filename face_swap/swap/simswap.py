@@ -10,12 +10,27 @@ This implementation supports:
 - ONNX runtime for optimized inference
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import cv2
 import numpy as np
-import torch
-import torch.nn as nn
+try:  # torch is only needed for the optional SimSwap .pth path
+    import torch
+    import torch.nn as nn
+
+    _TORCH_OK = True
+except ImportError:  # ONNX-only installs (the default swap path) work without it
+    torch = None  # type: ignore[assignment]
+    _TORCH_OK = False
+
+    class _NNStub:
+        class Module:
+            def __init__(self, *a, **k):
+                raise ImportError("SimSwap PyTorch weights need torch: pip install torch")
+
+    nn = _NNStub()  # type: ignore[assignment]
 
 from ..core.types import AlignedFace, Embedding, SwapResult
 from .base import FaceSwapper

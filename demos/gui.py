@@ -20,7 +20,7 @@ def main():
 
     from demos.gui_app.main_window import MainWindow, load_app_icon
     from demos.gui_app.paths import ensure_runtime_cwd
-    from demos.gui_app.theme import APP_STYLESHEET
+    from demos.gui_app.theme import build_stylesheet, load_fonts
 
     ensure_runtime_cwd()
 
@@ -30,7 +30,8 @@ def main():
     icon = load_app_icon()
     if not icon.isNull():
         app.setWindowIcon(icon)
-    app.setStyleSheet(APP_STYLESHEET)
+    family = load_fonts()
+    app.setStyleSheet(build_stylesheet(family))
     win = MainWindow()
     if not icon.isNull():
         win.setWindowIcon(icon)

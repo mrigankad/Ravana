@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0 (unreleased) — 2026-11-16
+
+### Desktop app (redesign)
+- Light theme with Inter bundled; new "ten faces" mark and app icon
+- Title-bar tabs (Swap, Batch, Live, Models), context rail, compare canvas with draggable divider, Result and Side-by-side views
+- Automatic ID and sharpness scoring after every image swap; swap time readout
+- Inline banners replace modal dialogs; one-time consent gate before the first swap
+- Cancel any running job with Esc; batch queue shows per-row status
+- Responsive layout from 1440 px down to ~780 px
+- 78-icon kit and Dasha character states (`design/kit/`)
+
+### Engine
+- Pipeline is cached between `swap_image` / `swap_video` calls (`face_swap.clear_cache()` to reset)
+- Pixel-boost tiles no longer repeat; paste-back limited to the face ROI
+- Unicode-safe image IO across the SDK and CLI
+- RetinaFace receives BGR as InsightFace expects; modular components load lazily
+- Video output is remuxed with source audio (H.264 + AAC) when ffmpeg is on PATH
+- One-Euro keypoint smoothing; optical-flow blending limited to the face ROI
+- torch is optional unless you load SimSwap PyTorch weights
+
+### Fixes
+- GUI worker signals no longer shadow `QThread.finished`; camera always released
+
 ## 0.3.4 — 2026-08-04
 
 ### Packaging

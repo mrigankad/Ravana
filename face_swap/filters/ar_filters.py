@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import cv2
+from ..core.io import imread_unicode
 import numpy as np
 
 logger = logging.getLogger("face_swap.filters")
@@ -179,7 +180,7 @@ class ARFilterEngine:
         # Extract source identity
         source_images = []
         for path in preset.source_images:
-            img = cv2.imread(path)
+            img = imread_unicode(path)
             if img is not None:
                 source_images.append(img)
 
@@ -200,13 +201,13 @@ class ARFilterEngine:
             OverlayMode.FRAME,
             OverlayMode.STICKER,
         ):
-            overlay = cv2.imread(preset.overlay_asset, cv2.IMREAD_UNCHANGED)
+            overlay = imread_unicode(preset.overlay_asset, cv2.IMREAD_UNCHANGED)
             if overlay is not None:
                 self._overlay_cache[preset.name] = overlay
 
         # Load background
         if preset.background and preset.overlay_mode == OverlayMode.BACKGROUND_REPLACE:
-            bg = cv2.imread(preset.background)
+            bg = imread_unicode(preset.background)
             if bg is not None:
                 self._bg_image = bg
 
