@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ravana · Face swap that scores itself</title>
+<meta name="description" content="Open-source face swap for images, video and webcam. Every result gets an identity and sharpness score. Runs on NVIDIA, AMD and Intel GPUs. MIT, local, no cloud.">
+<meta property="og:title" content="Ravana: the face swap that tells you how good it is">
+<meta property="og:description" content="Open-source face swap with built-in quality scores. NVIDIA, AMD, Intel, CPU. Local and MIT.">
+<meta property="og:image" content="https://mrigankad.github.io/Ravana/assets/brand/readme-hero.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/brand/mark-light.svg">
+<style>
+@font-face{font-family:Inter;src:url(assets/fonts/Inter-Variable.ttf) format("truetype");font-weight:100 900;font-display:swap}
+:root{--ink:#15120F;--plaster:#F5F3F0;--paper:#FFFFFF;--seam:#E7E3DD;--ash:#6B645B;--sindoor:#E0401F;--brass:#A97A12;--code:#F5F3F0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#F5F3F0;--plaster:#1C1916;--paper:#12100E;--seam:#2C2824;--ash:#A39B91;--code:#1C1916}}
+:root[data-theme="dark"]{--ink:#F5F3F0;--plaster:#1C1916;--paper:#12100E;--seam:#2C2824;--ash:#A39B91;--code:#1C1916}
+*{box-sizing:border-box;margin:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--paper);color:var(--ink);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+img{max-width:100%;display:block}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+nav{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--seam)}
+nav .wrap{display:flex;align-items:center;gap:24px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;text-decoration:none;font-size:17px}
+.brand img{height:22px}
+nav .links{display:flex;gap:20px;margin-left:auto;font-size:14px;color:var(--ash)}
+nav .links a{text-decoration:none}nav .links a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;border:1px solid var(--seam);background:var(--paper);white-space:nowrap}
+.btn.primary{background:var(--sindoor);border-color:var(--sindoor);color:#fff}
+.btn:hover{filter:brightness(.96)}
+header{padding:88px 0 56px}
+.eyebrow{display:inline-block;font-size:13px;font-weight:600;color:var(--sindoor);margin-bottom:18px}
+h1{font-size:clamp(38px,6vw,68px);line-height:1.04;letter-spacing:-.03em;font-weight:700;max-width:16ch}
+h1 em{font-style:normal;color:var(--sindoor)}
+.lede{font-size:clamp(17px,2vw,20px);color:var(--ash);max-width:58ch;margin:22px 0 32px}
+.ctas{display:flex;gap:12px;flex-wrap:wrap}
+.install{margin-top:28px;display:flex;align-items:center;gap:12px;background:var(--code);border:1px solid var(--seam);border-radius:10px;padding:12px 14px;max-width:560px;font-size:14px;overflow-x:auto}
+.install code{font-family:Inter,system-ui,sans-serif;white-space:nowrap;font-weight:500}
+.install button{margin-left:auto;border:0;background:none;color:var(--ash);font:inherit;font-size:13px;cursor:pointer;flex-shrink:0}
+.shot{border:1px solid var(--seam);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px -30px rgba(21,18,15,.35)}
+section{padding:80px 0;border-top:1px solid var(--seam)}
+h2{font-size:clamp(28px,3.6vw,40px);letter-spacing:-.02em;line-height:1.12;font-weight:700;max-width:22ch}
+.sub{color:var(--ash);max-width:60ch;margin-top:14px;font-size:17px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.card{background:var(--plaster);border-radius:14px;padding:24px}
+.card h3{font-size:17px;font-weight:650;margin-bottom:6px}
+.card p{color:var(--ash);font-size:15px}
+.compare{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.compare figure{margin:0}
+.compare img{border-radius:12px;aspect-ratio:1;object-fit:cover;width:100%}
+.compare figcaption{font-size:14px;color:var(--ash);margin-top:10px;display:flex;justify-content:space-between}
+.chip{font-weight:600;color:var(--ink);background:var(--plaster);border-radius:999px;padding:2px 10px;font-size:13px}
+.chip.ok{color:#2F7A3F}
+table{width:100%;border-collapse:collapse;margin-top:36px;font-size:15px}
+th,td{text-align:left;padding:14px 12px;border-bottom:1px solid var(--seam);vertical-align:top}
+th{font-size:13px;color:var(--ash);font-weight:600}
+td.y{color:var(--ink);font-weight:600}td.n{color:var(--ash)}
+.tablewrap{overflow-x:auto}
+pre{background:var(--code);border:1px solid var(--seam);border-radius:12px;padding:20px;overflow-x:auto;font-size:14px;line-height:1.7;margin-top:16px}
+pre code{font-family:Inter,system-ui,sans-serif}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px}
+.cols>div,.grid3>*,.compare>*{min-width:0}
+html,body{overflow-x:hidden}
+.cols h3{font-size:17px;font-weight:650}
+.note{border-radius:14px;background:var(--plaster);padding:28px;margin-top:32px}
+.note p+p{margin-top:10px}
+footer{border-top:1px solid var(--seam);padding:40px 0 56px;color:var(--ash);font-size:14px}
+footer .wrap{display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+footer .links{margin-left:auto;display:flex;gap:18px}
+@media (max-width:860px){.grid3,.compare{grid-template-columns:1fr 1fr}.cols{grid-template-columns:1fr}nav .links{display:none}}
+@media (max-width:560px){.wrap{padding:0 16px}.grid3,.compare{grid-template-columns:1fr}header{padding:56px 0 40px}section{padding:56px 0}nav .btn span{display:none}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="brand" href="#"><img src="assets/brand/mark-light.svg" alt="">Ravana</a>
+  <div class="links"><a href="#scores">Scores</a><a href="#compare">Compare</a><a href="#how">How it works</a><a href="#install">Install</a><a href="#responsible">Responsible use</a></div>
+  <a class="btn" href="https://github.com/mrigankad/Ravana">★ <span>Star on GitHub</span></a>
+</div></nav>
+
+<header><div class="wrap">
+  <span class="eyebrow">Open source · MIT · runs on your machine</span>
+  <h1>The face swap that tells you <em>how good it is.</em></h1>
+  <p class="lede">Ravana swaps faces in photos, video and webcam, and scores every result for identity and sharpness. Compare settings with numbers, not guesses. Works on NVIDIA, AMD and Intel GPUs.</p>
+  <div class="ctas">
+    <a class="btn primary" href="https://github.com/mrigankad/Ravana/releases">Download for Windows</a>
+    <a class="btn" href="#install">pip install</a>
+    <a class="btn" href="https://github.com/mrigankad/Ravana">View on GitHub</a>
+  </div>
+  <div class="install"><code id="cmd">pip install "git+https://github.com/mrigankad/Ravana.git"</code><button onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('cmd').textContent);this.textContent='Copied'">Copy</button></div>
+</div></header>
+
+<div class="wrap" id="demo"><div class="shot"><img src="assets/brand/app-result-1440.png" alt="Ravana desktop app: compare slider over a swapped face with identity and sharpness scores" width="1440" height="900"></div></div>
+
+<section id="scores"><div class="wrap">
+  <h2>Every result comes with a score.</h2>
+  <p class="sub">Other swappers leave you to squint at the output. Ravana measures it, so you can see which setting actually worked.</p>
+  <div class="grid3">
+    <div class="card"><h3>Identity</h3><p>ArcFace cosine similarity between the source face and the result. It tells you whether the swap still looks like the person.</p></div>
+    <div class="card"><h3>Sharpness</h3><p>Detail gained or lost against the target. It catches restorers that smear the face.</p></div>
+    <div class="card"><h3>Variants, ranked</h3><p>Try GFPGAN, GPEN or a 1024 boost in one click and compare them side by side with their scores.</p></div>
+  </div>
+</div></section>
+
+<section id="compare"><div class="wrap">
+  <h2>Same inputs, different settings.</h2>
+  <p class="sub">Examples from the repo's comparison set. Run <code>ravana evaluate</code> to score your own.</p>
+  <div class="compare">
+    <figure><img src="assets/comparisons/woman1.jpg" alt="Source face" loading="lazy"><figcaption>Source</figcaption></figure>
+    <figure><img src="assets/comparisons/seamless_woman1_on_man1.jpg" alt="Seamless preset result" loading="lazy"><figcaption>Seamless <span class="chip">ID 0.31 · +16.9</span></figcaption></figure>
+    <figure><img src="assets/comparisons/gpen_woman1_on_man1.jpg" alt="GPEN restore result" loading="lazy"><figcaption>GPEN restore</figcaption></figure>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Built for the problems people actually hit.</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th></th><th>Ravana</th><th>Typical open-source swapper</th></tr></thead>
+    <tbody>
+      <tr><td>Quality scores on every result</td><td class="y">Yes, identity and sharpness</td><td class="n">Judge by eye</td></tr>
+      <tr><td>AMD and Intel GPUs</td><td class="y">DirectML, picked automatically</td><td class="n">Mostly NVIDIA, or separate builds</td></tr>
+      <tr><td>Install</td><td class="y">Windows zip, models download on first run</td><td class="n">CUDA, cuDNN and version pinning</td></tr>
+      <tr><td>Use as a library</td><td class="y"><code>swap_image()</code> in 3 lines, plus a CLI</td><td class="n">App or CLI only</td></tr>
+      <tr><td>Consent and labelling</td><td class="y">Consent gate, optional watermark</td><td class="n">A README disclaimer</td></tr>
+      <tr><td>Batch</td><td class="y">Queue tab with retry</td><td class="n">CLI scripts</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it works.</h2>
+  <p class="sub">Detect, embed, swap, mask, restore and composite. ONNX Runtime throughout, so the same models run on CUDA, DirectML or CPU.</p>
+  <div class="shot" style="margin-top:36px"><img src="assets/brand/agent-graph.png" alt="Pipeline: ingest, detect and track, identity, swap, mask, restore, composite, temporal, verify, seal, encode" loading="lazy"></div>
+  <div class="grid3">
+    <div class="card"><h3>Swappers</h3><p>HyperSwap 256 for best stills, InSwapper 128 for speed.</p></div>
+    <div class="card"><h3>Restore and mask</h3><p>GFPGAN, GPEN, CodeFormer, XSeg occlusion, lighting and colour match.</p></div>
+    <div class="card"><h3>Realtime</h3><p>Detect-every-N, ROI tracking and One-Euro smoothing for webcam.</p></div>
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <h2>Up and running in a minute.</h2>
+  <div class="cols">
+    <div><h3>Python</h3>
+<pre><code>pip install "git+https://github.com/mrigankad/Ravana.git"            # CPU
+pip install "ravana-sdk[gpu] @ git+https://github.com/mrigankad/Ravana.git"       # NVIDIA
+pip install "ravana-sdk[directml] @ git+https://github.com/mrigankad/Ravana.git"  # AMD / Intel
+python scripts/first_run_check.py --download</code></pre></div>
+    <div><h3>Three lines</h3>
+<pre><code>import cv2
+from face_swap import FaceSwapConfig, swap_image
+
+out = swap_image(cv2.imread("source.jpg"), cv2.imread("target.jpg"),
+                 FaceSwapConfig(quality="seamless", device="auto"))</code></pre></div>
+  </div>
+  <h3 style="margin-top:32px;font-size:17px">CLI</h3>
+<pre><code>ravana -s source.jpg -t target.jpg -o out.jpg -q seamless
+ravana -s source.jpg -t input.mp4  -o out.mp4 -q medium
+ravana evaluate -s source.jpg -t target.jpg -o out.jpg</code></pre>
+</div></section>
+
+<section><div class="wrap">
+  <h2>One icon set. One mascot.</h2>
+  <p class="sub">78 icons on a 24 px grid, and Dasha, a ten-headed king with one pose per app state.</p>
+  <div class="shot" style="margin-top:36px"><img src="assets/brand/character-sheet.png" alt="Dasha character poses for ten app states" loading="lazy"></div>
+</div></section>
+
+<section id="responsible"><div class="wrap">
+  <h2>Use it responsibly.</h2>
+  <div class="note">
+    <p>Ravana is for VFX, entertainment, privacy and creative work <strong>with the consent of everyone shown</strong>. Don't use it to impersonate, deceive or harass. Label synthetic media where the law requires it, for example EU AI Act Article 50.</p>
+    <p>The code is MIT. The default model weights are not: InsightFace and HyperSwap are for non-commercial research, and CodeFormer is under the NTU S-Lab licence. Check each one before you ship anything.</p>
+    <p>The only official download is <a href="https://github.com/mrigankad/Ravana/releases">GitHub Releases</a>.</p>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <span>Ravana · MIT</span>
+  <div class="links"><a href="https://github.com/mrigankad/Ravana">GitHub</a><a href="https://github.com/mrigankad/Ravana/releases">Releases</a><a href="https://github.com/mrigankad/Ravana/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/mrigankad/Ravana/issues">Issues</a></div>
+</div></footer>
+</body>
+</html>

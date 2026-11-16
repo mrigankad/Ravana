@@ -7,9 +7,32 @@
   <img src="https://img.shields.io/badge/python-3.9%2B-15120F" alt="Python 3.9+">
   <img src="https://img.shields.io/badge/runs%20on-CUDA%20%C2%B7%20DirectML%20%C2%B7%20CPU-15120F" alt="CUDA, DirectML, CPU">
   <img src="https://img.shields.io/badge/code-MIT-15120F" alt="MIT">
+  <a href="https://github.com/mrigankad/Ravana/stargazers"><img src="https://img.shields.io/github/stars/mrigankad/Ravana?style=flat&color=E0401F" alt="Stars"></a>
 </p>
 
-**Ravana** is an open-source face-swap SDK and desktop app for images, video and webcam. Most swappers leave you to judge quality by eye. Ravana gives every result an identity score (ArcFace) and a sharpness score, so you can compare settings with numbers instead of guesses.
+<h3 align="center">The face swap that tells you how good it is.</h3>
+
+<p align="center">
+  <a href="https://mrigankad.github.io/Ravana/"><b>Website</b></a> ·
+  <a href="https://github.com/mrigankad/Ravana/releases"><b>Download for Windows</b></a> ·
+  <a href="#get-started"><b>pip install</b></a> ·
+  <a href="docs/research/"><b>Research &amp; roadmap</b></a>
+</p>
+
+**Ravana** is an open-source face-swap SDK and desktop app for photos, video and webcam. It scores every result for **identity** (ArcFace) and **sharpness**, so you can compare settings with numbers instead of guesses. It runs locally on **NVIDIA, AMD and Intel GPUs** (CUDA or DirectML), or on CPU.
+
+## Why Ravana
+
+| | Ravana | Typical open-source swapper |
+|---|---|---|
+| Quality scores on every result | **Yes, identity and sharpness** | Judge by eye |
+| AMD and Intel GPUs | **DirectML, picked automatically** | Mostly NVIDIA, or separate builds |
+| Install | **Windows zip, models download on first run** | CUDA, cuDNN and version pinning |
+| Use as a library | **`swap_image()` in 3 lines, plus a CLI** | App or CLI only |
+| Consent and labelling | **Consent gate, optional watermark** | A README disclaimer |
+| Batch | **Queue tab with retry** | CLI scripts |
+
+If Ravana saves you time, a ⭐ helps other people find it.
 
 ## Get started
 
@@ -113,6 +136,8 @@ The Ravana code is MIT. The **default model weights are not**:
 - HyperSwap is under ResearchRAIL.
 
 Check each model's licence before shipping anything.
+
+The only official download is [GitHub Releases](https://github.com/mrigankad/Ravana/releases). Ravana has no other website selling builds.
 
 ## Use it responsibly
 
