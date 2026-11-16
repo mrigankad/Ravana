@@ -4,6 +4,7 @@
 
 - `ravana doctor`: checks Python, onnxruntime builds (including duplicates that force CPU), GPU providers, NVIDIA driver, CUDA libraries, ffmpeg, models and disk, with a fix for each problem. `--json` for bug reports.
 - Desktop app: click the device chip to open the same report, with copyable fixes.
+- Multi-face tracker (`face_swap/tracking`): IoU + ArcFace appearance cost, Hungarian assignment, track lifetimes. In video, `face_select="first"`/`"index"` now follow the same person every frame instead of whoever the detector ranks first.
 - GitHub Pages site, issue templates, CONTRIBUTING.md.
 
 ## 0.4.0 (unreleased) — 2026-11-16

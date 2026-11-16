@@ -62,6 +62,7 @@ from .swap.hyperswap import HyperSwapModel
 from .temporal import OpticalFlowConfig, OpticalFlowSmoother, TemporalSmoother
 from .temporal.one_euro import OneEuroTracks
 from .temporal.smoother import ema_smooth_insight_faces
+from .tracking import FaceTrackSet
 from .watermark import InvisibleWatermarker, WatermarkConfig
 
 logger = logging.getLogger("face_swap.pipeline")
@@ -146,6 +147,7 @@ class FaceSwapPipeline:
         self._flow_smoother: Optional[OpticalFlowSmoother] = None
         self._smooth_faces_prev: list = []
         self._kps_tracks = OneEuroTracks()
+        self._face_tracks = FaceTrackSet()  # stable ids so first/index never flip mid-clip
 
         self.quality_validator: Optional[QualityValidator] = None
         self.profiler: Optional[PipelineProfiler] = None
@@ -371,6 +373,7 @@ class FaceSwapPipeline:
             self._flow_smoother.reset()
         self._smooth_faces_prev = []
         self._kps_tracks.reset()
+        self._face_tracks.reset()
         self._cached_faces = []
         self._cache_frame_idx = -999
         if self.temporal_smoother is not None:
@@ -384,6 +387,7 @@ class FaceSwapPipeline:
             self._flow_smoother.reset()
         self._smooth_faces_prev = []
         self._kps_tracks.reset()
+        self._face_tracks.reset()
         self._cached_faces = []
         self._cache_frame_idx = -999
         if self.temporal_smoother is not None:
@@ -449,9 +453,18 @@ class FaceSwapPipeline:
             faces = faces[: max(1, fast.max_faces)]
         return faces
 
-    def _get_faces(self, frame: Frame) -> list:
+    def _track_for_select(self, faces: list) -> list:
+        """Video only: order faces by stable track id so first/index pick the same person every frame."""
+        mode = (getattr(self.config, "face_select", "all") or "all").lower()
+        if mode in ("first", "index") and len(faces) > 1:
+            return self._face_tracks.tag_faces(list(faces))
+        return faces
+
+    def _get_faces(self, frame: Frame, tracked: bool = False) -> list:
         """Detect faces and apply ``face_select`` / ``max_faces``."""
         faces = self._detect_faces(frame)
+        if tracked:
+            faces = self._track_for_select(faces)
         return select_faces(
             faces,
             mode=getattr(self.config, "face_select", "all"),
@@ -470,7 +483,7 @@ class FaceSwapPipeline:
             n = int(self.config.video_detect_every_n)
 
         if n <= 1:
-            return self._get_faces(frame)
+            return self._get_faces(frame, tracked=True)
 
         need_full = (
             frame_number - self._cache_frame_idx >= n
@@ -478,7 +491,7 @@ class FaceSwapPipeline:
             or frame_number == 0
         )
         if need_full:
-            self._cached_faces = self._get_faces(frame)
+            self._cached_faces = self._get_faces(frame, tracked=True)
             self._cache_frame_idx = frame_number
             return list(self._cached_faces)
 
@@ -487,7 +500,7 @@ class FaceSwapPipeline:
             roi_faces = self._detect_faces_in_roi(frame, self._cached_faces, fast)
             if roi_faces:
                 selected = select_faces(
-                    roi_faces,
+                    self._track_for_select(roi_faces),
                     mode=getattr(self.config, "face_select", "all"),
                     index=int(getattr(self.config, "face_index", 0)),
                     max_faces=int(
