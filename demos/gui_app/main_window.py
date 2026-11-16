@@ -39,6 +39,7 @@ from demos.gui_app.paths import models_dir
 from demos.gui_app.preview import IMAGE_EXTS, bgr_to_qpixmap, load_path_pixmap
 from demos.gui_app.theme import COLORS
 from demos.gui_app.widgets import (
+    DoctorPanel,
     Banner,
     CompareCanvas,
     DropCard,
@@ -204,7 +205,10 @@ class MainWindow(QMainWindow):
         )
         self._device_label = QLabel(dev)
         self._device_label.setObjectName("label")
-        self._device_label.setToolTip("Best ONNX Runtime provider found on this machine")
+        self._device_label.setToolTip("Click for the hardware doctor")
+        chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        chip.mousePressEvent = lambda _e: self._open_doctor()
+        self._chip, self._chip_dot, self._doctor_report = chip, dot, None
         cl.addWidget(dot)
         cl.addWidget(self._device_label)
         chip.setFixedHeight(30)
@@ -882,6 +886,25 @@ class MainWindow(QMainWindow):
 
     # ================================================================ models
     _models_missing: list = []
+
+    def _run_doctor(self):
+        from face_swap.core import doctor
+
+        try:
+            self._doctor_report = doctor.run(str(models_dir()))
+        except Exception:
+            self._doctor_report = None
+        return self._doctor_report
+
+    def _open_doctor(self) -> None:
+        rep = self._doctor_report or self._run_doctor()
+        if rep is None:
+            self._set_status("Hardware check failed. Run `ravana doctor` in a terminal.")
+            return
+        if rep.status != "ok":
+            tone = COLORS["accent"] if rep.status == "fail" else COLORS["brass"]
+            self._chip_dot.setStyleSheet(f"background: {tone}; border-radius: 3px;")
+        DoctorPanel(rep, self).show_below(self._chip)
 
     def _check_models(self) -> None:
         try:

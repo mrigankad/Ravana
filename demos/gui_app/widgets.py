@@ -602,3 +602,76 @@ class Banner(QFrame):
         if action:
             self._btn.setText(action)
         self.show()
+
+
+class DoctorPanel(QFrame):
+    """Popup under the device chip: every doctor check, its detail and a copyable fix."""
+
+    _ICON = {"ok": ("check", "ok"), "warn": ("warning", "brass"), "fail": ("error", "accent")}
+
+    def __init__(self, report, parent: Optional[QWidget] = None):
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        from PySide6.QtWidgets import QApplication, QPushButton, QVBoxLayout
+
+        self.setObjectName("doctor")
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setFixedWidth(440)
+        self.setStyleSheet(
+            f"QFrame#doctor {{ background: {COLORS['bg']}; border: 1px solid {COLORS['line']}; border-radius: 10px; }}"
+            f"QLabel#dtitle {{ font-size: 14px; font-weight: 600; color: {COLORS['text']}; }}"
+            f"QLabel#dname {{ font-size: 13px; font-weight: 600; color: {COLORS['text']}; }}"
+            f"QLabel#ddetail {{ font-size: 12px; color: {COLORS['muted']}; }}"
+            f"QLabel#dfix {{ font-size: 12px; color: {COLORS['text_2']}; background: {COLORS['surface']};"
+            f" border-radius: 6px; padding: 6px 8px; }}"
+        )
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(10)
+        head = QLabel(f"Running on {report.device}")
+        head.setObjectName("dtitle")
+        lay.addWidget(head)
+        for c in report.checks:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            ic = QLabel()
+            name, tone = self._ICON.get(c.status, ("info", "muted"))
+            ic.setPixmap(svg_pixmap(f"{name}.svg", QSize(16, 16), COLORS[tone]))
+            ic.setFixedSize(16, 18)
+            ic.setAlignment(Qt.AlignmentFlag.AlignTop)
+            row.addWidget(ic, 0, Qt.AlignmentFlag.AlignTop)
+            col = QVBoxLayout()
+            col.setSpacing(3)
+            t = QLabel(c.name)
+            t.setObjectName("dname")
+            d = QLabel(c.detail)
+            d.setObjectName("ddetail")
+            d.setWordWrap(True)
+            col.addWidget(t)
+            col.addWidget(d)
+            if c.fix and c.status != "ok":
+                fr = QHBoxLayout()
+                fx = QLabel(c.fix)
+                fx.setObjectName("dfix")
+                fx.setWordWrap(True)
+                fx.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                cp = QPushButton()
+                cp.setObjectName("ghost")
+                cp.setIcon(svg_icon("copy.svg", 14, COLORS["muted"]))
+                cp.setToolTip("Copy fix")
+                cp.setFixedSize(28, 28)
+                cp.setCursor(Qt.CursorShape.PointingHandCursor)
+                cp.clicked.connect(lambda _=False, s=c.fix: QApplication.clipboard().setText(s))
+                fr.addWidget(fx, 1)
+                fr.addWidget(cp, 0, Qt.AlignmentFlag.AlignTop)
+                col.addLayout(fr)
+            row.addLayout(col, 1)
+            lay.addLayout(row)
+        foot = QLabel("Same report from the terminal: ravana doctor")
+        foot.setObjectName("ddetail")
+        lay.addWidget(foot)
+
+    def show_below(self, anchor: QWidget) -> None:
+        self.adjustSize()
+        pt = anchor.mapToGlobal(anchor.rect().bottomRight())
+        self.move(pt.x() - self.width(), pt.y() + 6)
+        self.show()

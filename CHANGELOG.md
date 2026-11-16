@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `ravana doctor`: checks Python, onnxruntime builds (including duplicates that force CPU), GPU providers, NVIDIA driver, CUDA libraries, ffmpeg, models and disk, with a fix for each problem. `--json` for bug reports.
+- Desktop app: click the device chip to open the same report, with copyable fixes.
+- GitHub Pages site, issue templates, CONTRIBUTING.md.
+
 ## 0.4.0 (unreleased) — 2026-11-16
 
 ### Desktop app (redesign)

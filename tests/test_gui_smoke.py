@@ -64,3 +64,24 @@ def test_unicode_image_roundtrip(tmp_path):
     assert imwrite_any(str(p), img)
     back = imread_any(str(p))
     assert back is not None and back.shape == img.shape
+
+
+def test_doctor_panel_renders(qapp=None):
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    from demos.gui_app.widgets import DoctorPanel
+    from face_swap.core import doctor
+
+    rep = doctor.Report(device="CPU", checks=[
+        doctor.Check("providers", doctor.WARN, "CPU only", "pip install x"),
+        doctor.Check("disk", doctor.OK, "50 GB free"),
+    ])
+    p = DoctorPanel(rep)
+    p.adjustSize()
+    app.processEvents()
+    assert p.width() == 440 and p.height() > 100
+    p.close()
